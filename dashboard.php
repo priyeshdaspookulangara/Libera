@@ -21,32 +21,26 @@ $overdue_count = db_fetch_assoc($overdue_res)['cnt'] ?? 0;
 $total_members_res = db_query($conn, "SELECT COUNT(*) as cnt FROM MstrMember");
 $total_members = db_fetch_assoc($total_members_res)['cnt'] ?? 0;
 
-// Daily Cash Flow Total (Total Receipts - Total Payments today)
-$daily_cash_res = db_query($conn, "SELECT
-                                    COALESCE(SUM(TransactionAmount), 0) as daily_total
-                                   FROM AccTransaction
-                                   WHERE TransactionDate = ?", "s", [$today]);
+// Daily Cash Flow Total
+$daily_cash_res = db_query($conn, "SELECT COALESCE(SUM(TransactionAmount), 0) as daily_total FROM AccTransaction WHERE TransactionDate = ?", "s", [$today]);
 $daily_cash_flow = db_fetch_assoc($daily_cash_res)['daily_total'] ?? 0.0;
 
 // Recent Book Issuances / Circulation Feed
-$recent_issues = db_query($conn, "SELECT i.*, b.BookName
-                                  FROM TransBookIssue i
-                                  LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber
-                                  ORDER BY i.IssueID DESC LIMIT 6");
+$recent_issues = db_query($conn, "SELECT i.*, b.BookName FROM TransBookIssue i LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber ORDER BY i.IssueID DESC LIMIT 6");
 
 // Recent Transactions Feed
-$recent_trans = db_query($conn, "SELECT t.*, l.LedgerName
-                                 FROM AccTransaction t
-                                 LEFT JOIN MstrLedger l ON t.LedgerNumberHead = l.LedgerNumber
-                                 ORDER BY t.AccTransNumber DESC LIMIT 6");
+$recent_trans = db_query($conn, "SELECT t.*, l.LedgerName FROM AccTransaction t LEFT JOIN MstrLedger l ON t.LedgerNumberHead = l.LedgerNumber ORDER BY t.AccTransNumber DESC LIMIT 6");
 
 require_once __DIR__ . '/includes/header.php';
 ?>
 
+<!-- Breadcrumbs & Section Title -->
+<div class="breadcrumb-nav mb-1">HOME / DASHBOARD</div>
+<h1 class="page-header-title">System Overview Dashboard</h1>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-gauge-high text-primary me-2"></i>Dashboard Overview</h2>
-        <small class="text-muted">Active Financial Period: <strong><?php echo htmlspecialchars($fiscal['YearDescription']); ?></strong></small>
+    <div class="text-muted small">
+        Active Financial Period: <strong><?php echo htmlspecialchars($fiscal['YearDescription']); ?></strong>
     </div>
     <div>
         <a href="/modules/circulation/issue.php" class="btn btn-primary fw-bold me-2"><i class="fa-solid fa-hand-holding-hand me-1"></i>Issue Book</a>
@@ -108,7 +102,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Quick Search Widget -->
 <div class="card shadow-sm mb-4">
-    <div class="card-body">
+    <div class="card-body p-4">
         <h5 class="card-title fw-bold text-secondary mb-3"><i class="fa-solid fa-magnifying-glass me-2"></i>Quick Search Lookup Widget</h5>
         <div class="row g-3">
             <div class="col-md-6">
@@ -129,7 +123,6 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Feeds Grid -->
 <div class="row g-4">
-    <!-- Active Checkouts -->
     <div class="col-md-6">
         <div class="card shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
@@ -173,7 +166,6 @@ require_once __DIR__ . '/includes/header.php';
         </div>
     </div>
 
-    <!-- Recent Accounting Postings -->
     <div class="col-md-6">
         <div class="card shadow-sm">
             <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
