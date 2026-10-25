@@ -856,3 +856,11 @@ INSERT INTO `AccTransaction` (`AccTransNumber`, `TransHeadNumber`, `TransTypeNum
 (98, 3, 14, 1, '2024-04-18', '2024-04-18', 1, 10023, NULL, 1, 12360, '', 0, 0, 0),
 (99, 3, 14, 1, '2024-04-18', '2024-04-18', 10022, 1, NULL, 1, 12360, '', 0, 0, 0)
 ON DUPLICATE KEY UPDATE `TransactionAmount` = VALUES(`TransactionAmount`);
+-- ApiTokens Table for Mobile Application Authentication
+CREATE TABLE IF NOT EXISTS `ApiTokens` (
+    `TokenID` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `TokenValue` varchar(64) NOT NULL UNIQUE,
+    `UserNumber` smallint NOT NULL,
+    `CreatedAt` datetime NULL,
+    `ExpiresAt` datetime NULL
+) ENGINE=InnoDB;
