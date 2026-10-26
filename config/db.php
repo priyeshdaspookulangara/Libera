@@ -1,5 +1,5 @@
 <?php
-// config/db.php Centralized Database Layer supporting MySQLi and SQLite fallback
+// config/db.php Centralized Database Layer supporting MySQLi and SQLite fallback with Transaction Support
 
 define('DB_HOST', '127.0.0.1');
 define('DB_USER', 'root');
@@ -32,6 +32,39 @@ if ($mysqli_conn) {
         }
     } catch (PDOException $e) {
         error_log("Database Connection Failed: " . $e->getMessage());
+    }
+}
+
+/**
+ * Transaction Control Helpers
+ */
+function db_begin_transaction($conn) {
+    global $db_driver;
+    if (!$conn) return false;
+    if ($db_driver === 'mysqli') {
+        return mysqli_begin_transaction($conn);
+    } else {
+        return $conn->beginTransaction();
+    }
+}
+
+function db_commit($conn) {
+    global $db_driver;
+    if (!$conn) return false;
+    if ($db_driver === 'mysqli') {
+        return mysqli_commit($conn);
+    } else {
+        return $conn->commit();
+    }
+}
+
+function db_rollback($conn) {
+    global $db_driver;
+    if (!$conn) return false;
+    if ($db_driver === 'mysqli') {
+        return mysqli_rollback($conn);
+    } else {
+        return $conn->rollBack();
     }
 }
 
@@ -115,7 +148,7 @@ class SQLiteResultWrapper implements IteratorAggregate {
     }
 }
 
-// Override PHP standard mysqli helper functions when running SQLite mode to avoid PHP 8 Strict Type Errors
+// Override PHP standard mysqli helper functions when running SQLite mode
 if ($db_driver === 'sqlite') {
     function db_num_rows($res) {
         if (is_object($res) && isset($res->num_rows)) return $res->num_rows;
@@ -161,7 +194,7 @@ function init_sqlite_schema($pdo) {
     $clean_sql = preg_replace('/ENGINE=InnoDB/i', '', $clean_sql);
     $clean_sql = str_replace('LONGBLOB', 'BLOB', $clean_sql);
 
-    // SQLite autoincrement rule: column definition must be INTEGER PRIMARY KEY AUTOINCREMENT
+    // SQLite autoincrement rule
     $clean_sql = preg_replace('/`(.*?)`\s+(smallint|tinyint|bigint|int)\s+NOT\s+NULL\s+AUTO_INCREMENT\s+PRIMARY\s+KEY/i', '`$1` INTEGER PRIMARY KEY AUTOINCREMENT', $clean_sql);
     $clean_sql = str_replace('AUTO_INCREMENT', 'AUTOINCREMENT', $clean_sql);
     $clean_sql = str_replace('double', 'REAL', $clean_sql);
@@ -182,15 +215,12 @@ function init_sqlite_schema($pdo) {
         $q_trim = trim($q);
         if (empty($q_trim)) continue;
 
-        // Clean ON DUPLICATE KEY UPDATE clause for INSERT statements
         if (stripos($q_trim, 'INSERT INTO') === 0 && stripos($q_trim, 'ON DUPLICATE KEY UPDATE') !== false) {
             $q_trim = preg_replace('/ON DUPLICATE KEY UPDATE.*/is', '', $q_trim);
         }
 
-        // Clean table options like AUTO_INCREMENT=X
         $q_trim = preg_replace('/AUTO_INCREMENT=\d+/i', '', $q_trim);
 
-        // Escape single quotes for SQLite text literals in INSERT statements
         if (stripos($q_trim, "Harry Potter and the Sorcerer\'s Stone") !== false) {
             $q_trim = str_replace("Harry Potter and the Sorcerer\'s Stone", "Harry Potter and the Sorcerer''s Stone", $q_trim);
         }

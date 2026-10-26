@@ -232,6 +232,7 @@ $current_page = $_SERVER['PHP_SELF'];
                 <a href="/modules/circulation/issue.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/circulation/issue.php') ? 'active' : ''; ?>">Issue Book</a>
                 <a href="/modules/circulation/return.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/circulation/return.php') ? 'active' : ''; ?>">Return & Fine Processing</a>
                 <a href="/modules/circulation/issued_list.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/circulation/issued_list.php') ? 'active' : ''; ?>">Active Checkouts</a>
+                <a href="/modules/circulation/reservation.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/circulation/reservation.php') ? 'active' : ''; ?>">Reservations & Holds</a>
             </div>
 
             <!-- Inventory Accordion -->
@@ -241,6 +242,9 @@ $current_page = $_SERVER['PHP_SELF'];
             </a>
             <div class="collapse <?php echo (strpos($current_page, '/inventory/') !== false) ? 'show' : ''; ?> sidebar-submenu" id="menuInventory">
                 <a href="/modules/inventory/books.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/books.php') ? 'active' : ''; ?>">Book Stock Master</a>
+                <a href="/modules/inventory/scanner.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/scanner.php') ? 'active' : ''; ?>">Barcode / RFID Scanner</a>
+                <a href="/modules/inventory/writeoff.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/writeoff.php') ? 'active' : ''; ?>">Damaged / Lost Write-off</a>
+                <a href="/modules/inventory/audit.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/audit.php') ? 'active' : ''; ?>">Stock Audit Sessions</a>
                 <a href="/modules/inventory/authors.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/authors.php') ? 'active' : ''; ?>">Authors Directory</a>
                 <a href="/modules/inventory/publishers.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/publishers.php') ? 'active' : ''; ?>">Publishers Directory</a>
                 <a href="/modules/inventory/categories.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/inventory/categories.php') ? 'active' : ''; ?>">Categories & DDC</a>
@@ -253,6 +257,7 @@ $current_page = $_SERVER['PHP_SELF'];
             </a>
             <div class="collapse <?php echo (strpos($current_page, '/members/') !== false) ? 'show' : ''; ?> sidebar-submenu" id="menuMembers">
                 <a href="/modules/members/members.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/members/members.php') ? 'active' : ''; ?>">Member Profiles</a>
+                <a href="/modules/members/renew.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/members/renew.php') ? 'active' : ''; ?>">Validity & Renewals</a>
                 <a href="/modules/members/member_types.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/members/member_types.php') ? 'active' : ''; ?>">Classes & Rules</a>
             </div>
 
@@ -265,8 +270,15 @@ $current_page = $_SERVER['PHP_SELF'];
                 <a href="/modules/accounts/vouchers.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/vouchers.php') ? 'active' : ''; ?>">Post Voucher</a>
                 <a href="/modules/accounts/ledgers.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/ledgers.php') ? 'active' : ''; ?>">Chart of Accounts</a>
                 <a href="/modules/accounts/distributors.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/distributors.php') ? 'active' : ''; ?>">Distributors Vendors</a>
+                <a href="/modules/accounts/fiscal_closing.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/fiscal_closing.php') ? 'active' : ''; ?>">Fiscal Period Closing</a>
+                <a href="/modules/accounts/audit_log.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/audit_log.php') ? 'active' : ''; ?>">Audit Trail Logs</a>
                 <a href="/modules/accounts/reports.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/reports.php') ? 'active' : ''; ?>">Financial Reports</a>
             </div>
+
+            <!-- Analytics Link -->
+            <a href="/modules/reports/analytics.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/reports/analytics.php') ? 'active' : ''; ?>">
+                <i class="fa-solid fa-chart-line menu-icon text-secondary"></i> Circulation Analytics
+            </a>
         </nav>
     </aside>
 

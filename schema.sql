@@ -864,3 +864,75 @@ CREATE TABLE IF NOT EXISTS `ApiTokens` (
     `CreatedAt` datetime NULL,
     `ExpiresAt` datetime NULL
 ) ENGINE=InnoDB;
+
+-- BookReservations Table (Waitlist Queue)
+CREATE TABLE IF NOT EXISTS `BookReservations` (
+    `ReservationID` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `BookNumber` int NOT NULL,
+    `AccessionNumber` varchar(50) NULL,
+    `MemberNumber` int NOT NULL,
+    `ReservationDate` datetime NULL,
+    `NotificationStatus` varchar(50) NULL DEFAULT 'Pending', -- Pending, Notified, Claimed, Expired, Cancelled
+    `QueuePosition` int NULL DEFAULT 1,
+    `ExpiryDate` datetime NULL,
+    `Remarks` varchar(150) NULL
+) ENGINE=InnoDB;
+
+-- BookWriteOffs Table (Damaged / Lost Inventory Write-offs)
+CREATE TABLE IF NOT EXISTS `BookWriteOffs` (
+    `WriteOffID` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `BookNumber` int NOT NULL,
+    `AccessionNumber` varchar(50) NOT NULL,
+    `WriteOffReason` varchar(50) NOT NULL, -- Damaged, Lost, Withdrawn
+    `WriteOffAmount` double NOT NULL DEFAULT 0.0,
+    `WriteOffDate` datetime NULL,
+    `TransHeadNumber` int NULL, -- Linked Double-Entry Voucher
+    `Remarks` varchar(250) NULL,
+    `UserNumber` smallint NULL
+) ENGINE=InnoDB;
+
+-- AuditLogs Table (Financial & System Audit Trail)
+CREATE TABLE IF NOT EXISTS `AuditLogs` (
+    `AuditID` bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `ActionType` varchar(50) NOT NULL, -- VOUCHER_POST, ITEM_WRITEOFF, RETURN_FINE, MEMBER_RENEWAL, FISCAL_CLOSE
+    `Module` varchar(50) NOT NULL,
+    `ReferenceID` varchar(50) NULL,
+    `UserNumber` smallint NULL,
+    `UserName` varchar(50) NULL,
+    `ActionTimestamp` datetime NULL,
+    `IPAddress` varchar(45) NULL,
+    `DetailsJSON` text NULL
+) ENGINE=InnoDB;
+
+-- StockAudits Table (Physical Barcode / RFID Inventory Audit Sessions)
+CREATE TABLE IF NOT EXISTS `StockAudits` (
+    `AuditSessionID` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `SessionName` varchar(100) NOT NULL,
+    `StartDate` datetime NULL,
+    `EndDate` datetime NULL,
+    `AuditStatus` varchar(25) NULL DEFAULT 'In-Progress', -- In-Progress, Completed, Reconciled
+    `TotalScanned` int NULL DEFAULT 0,
+    `DiscrepancyCount` int NULL DEFAULT 0,
+    `Remarks` varchar(250) NULL
+) ENGINE=InnoDB;
+
+-- MediaTypes Master Table
+CREATE TABLE IF NOT EXISTS `MediaTypes` (
+    `MediaTypeID` tinyint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `MediaTypeName` varchar(50) NOT NULL, -- Book, Journal, Digital E-Resource, Multimedia
+    `MediaTypeCode` varchar(10) NULL,
+    `MediaTypeStatus` tinyint NULL DEFAULT 1
+) ENGINE=InnoDB;
+
+-- Seed MediaTypes
+INSERT INTO `MediaTypes` (`MediaTypeID`, `MediaTypeName`, `MediaTypeCode`, `MediaTypeStatus`) VALUES
+(1, 'Book / Hardcover', 'BK', 1),
+(2, 'Academic Journal / Periodical', 'JRN', 1),
+(3, 'Digital E-Resource / PDF', 'DIG', 1),
+(4, 'Multimedia / CD-DVD', 'AV', 1)
+ON DUPLICATE KEY UPDATE `MediaTypeName` = VALUES(`MediaTypeName`);
+
+-- Write-off Expense Ledger Account
+INSERT INTO `MstrLedger` (`LedgerNumber`, `LedgerCode`, `LedgerName`, `LedgerStatus`, `LedgerGroupNumber`, `LedgerRemarks`) VALUES
+(603, 'EXP_WRITEOFF', 'Book Inventory Write-off Expense', 1, 15, 'Expense ledger for lost or damaged books')
+ON DUPLICATE KEY UPDATE `LedgerName` = VALUES(`LedgerName`);
