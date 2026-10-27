@@ -37,9 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $res_h = db_query($conn, "INSERT INTO TransLedgerHead (TransactionDate, TransTypeNumber, YearNumber, TransactionRemarks) VALUES (?, 13, ?, ?)", "sis", [$trans_date, $year_num, "Item Write-off ($reason) - $accession"]);
                     $head_id = $res_h['insert_id'] ?? null;
 
-                    db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, TransactionAmount, TransactionRemarks) VALUES (?, 13, ?, 603, 10017, ?, ?)", "issds", [$head_id, $trans_date, $amount, "Write-off ($reason)"]);
-                    db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 13, ?, ?, 0, 'Dr Write-off Expense')", "isds", [$head_id, $trans_date, $amount]);
-                    db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 13, ?, 0, ?, 'Cr Book Inventory Asset')", "isds", [$head_id, $trans_date, $amount]);
+                    db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, TransactionAmount, TransactionRemarks) VALUES (?, 13, ?, 603, 10017, ?, ?)", "isds", [$head_id, $trans_date, $amount, "Write-off ($reason)"]);
+                    db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 13, ?, ?, 0, 'Dr Write-off Expense')", "isd", [$head_id, $trans_date, $amount]);
+                    db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 13, ?, 0, ?, 'Cr Book Inventory Asset')", "isd", [$head_id, $trans_date, $amount]);
                 }
 
                 // 2. Insert BookWriteOffs Record
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 db_query($conn, "UPDATE MstrBookStock SET BookStatus = 0 WHERE BookNumber = ?", "i", [$book['BookNumber']]);
 
                 // Audit Log
-                db_query($conn, "INSERT INTO AuditLogs (ActionType, Module, ReferenceID, UserNumber, UserName, ActionTimestamp, DetailsJSON) VALUES ('ITEM_WRITEOFF', 'INVENTORY', ?, ?, ?, ?, ?)", "siss", [$accession, $_SESSION['user_id'] ?? 1, $_SESSION['username'] ?? 'Admin', $today, json_encode(['reason' => $reason, 'amount' => $amount])]);
+                db_query($conn, "INSERT INTO AuditLogs (ActionType, Module, ReferenceID, UserNumber, UserName, ActionTimestamp, DetailsJSON) VALUES ('ITEM_WRITEOFF', 'INVENTORY', ?, ?, ?, ?, ?)", "sisss", [$accession, $_SESSION['user_id'] ?? 1, $_SESSION['username'] ?? 'Admin', $today, json_encode(['reason' => $reason, 'amount' => $amount])]);
 
                 db_commit($conn);
                 $msg = "Item '{$book['BookName']}' ($accession) written off successfully! Balancing journal entry posted for ₹" . number_format($amount, 2);

@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $head_id = $res_h['insert_id'] ?? 1;
 
             // Debit Cash Account (Ledger 1)
-            db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10012, ?, ?, ?)", "isidds", [$head_id, $today_date, $member_id, $collected_amount, "Book Fine Receipt"]);
+            db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10012, ?, ?, ?)", "isids", [$head_id, $today_date, $member_id, $collected_amount, "Book Fine Receipt"]);
 
             db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, ?, 0, ?)", "isids", [$head_id, $today_date, $member_id, $collected_amount, "Cash Fine"]);
 

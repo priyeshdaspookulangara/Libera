@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ledger_code = "DIST" . str_pad($dist_id, 3, '0', STR_PAD_LEFT);
                 $ledger_name = "Distributor - " . $name;
 
-                db_query($conn, "INSERT INTO MstrLedger (LedgerNumber, LedgerCode, LedgerName, LedgerStatus, LedgerGroupNumber, LedgerRemarks) VALUES (?, ?, ?, 1, 14, 'Vendor Creditor Ledger')", "issi", [$ledger_num, $ledger_code, $ledger_name]);
+                db_query($conn, "INSERT INTO MstrLedger (LedgerNumber, LedgerCode, LedgerName, LedgerStatus, LedgerGroupNumber, LedgerRemarks) VALUES (?, ?, ?, 1, 14, 'Vendor Creditor Ledger')", "iss", [$ledger_num, $ledger_code, $ledger_name]);
 
                 $msg = "Distributor vendor registered successfully! Linked Creditor Ledger #$ledger_num created.";
             } else {

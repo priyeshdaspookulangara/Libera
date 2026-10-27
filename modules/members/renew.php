@@ -39,12 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $head_id = $res_h['insert_id'] ?? 1;
 
                 // Dr Cash (1), Cr Subscription Income (10013)
-                db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10013, ?, ?, ?)", "isidds", [$head_id, $today, $member_id, $sub_fee, "Subscription Renewal Receipt"]);
+                db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10013, ?, ?, ?)", "isids", [$head_id, $today, $member_id, $sub_fee, "Subscription Renewal Receipt"]);
                 db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, ?, 0, 'Cash Subscription')", "isids", [$head_id, $today, $member_id, $sub_fee]);
                 db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, 0, ?, 'Subscription Fee Income')", "isids", [$head_id, $today, $member_id, $sub_fee]);
 
                 // Audit Log
-                db_query($conn, "INSERT INTO AuditLogs (ActionType, Module, ReferenceID, UserNumber, UserName, ActionTimestamp, DetailsJSON) VALUES ('MEMBER_RENEWAL', 'MEMBERS', ?, ?, ?, ?, ?)", "siss", ["MEM-$member_id", $_SESSION['user_id'] ?? 1, $_SESSION['username'] ?? 'Admin', date('Y-m-d H:i:s'), json_encode(['amount' => $sub_fee, 'years' => $renewal_years])]);
+                db_query($conn, "INSERT INTO AuditLogs (ActionType, Module, ReferenceID, UserNumber, UserName, ActionTimestamp, DetailsJSON) VALUES ('MEMBER_RENEWAL', 'MEMBERS', ?, ?, ?, ?, ?)", "sisss", ["MEM-$member_id", $_SESSION['user_id'] ?? 1, $_SESSION['username'] ?? 'Admin', date('Y-m-d H:i:s'), json_encode(['amount' => $sub_fee, 'years' => $renewal_years])]);
             }
 
             db_commit($conn);

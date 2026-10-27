@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         // 4. Audit Log
-        db_query($conn, "INSERT INTO AuditLogs (ActionType, Module, ReferenceID, UserNumber, UserName, ActionTimestamp, DetailsJSON) VALUES ('FISCAL_CLOSE', 'ACCOUNTS', ?, ?, ?, ?, ?)", "siss", ["FY-$old_year_num", $_SESSION['user_id'] ?? 1, $_SESSION['username'] ?? 'Admin', date('Y-m-d H:i:s'), json_encode(['closed_year' => $current_fiscal['YearDescription'], 'new_year' => $new_year_desc])]);
+        db_query($conn, "INSERT INTO AuditLogs (ActionType, Module, ReferenceID, UserNumber, UserName, ActionTimestamp, DetailsJSON) VALUES ('FISCAL_CLOSE', 'ACCOUNTS', ?, ?, ?, ?, ?)", "sisss", ["FY-$old_year_num", $_SESSION['user_id'] ?? 1, $_SESSION['username'] ?? 'Admin', date('Y-m-d H:i:s'), json_encode(['closed_year' => $current_fiscal['YearDescription'], 'new_year' => $new_year_desc])]);
 
         db_commit($conn);
         $msg = "Financial Year {$current_fiscal['YearDescription']} closed and locked! New period '$new_year_desc' active with opening balances rolled forward.";
