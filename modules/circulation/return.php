@@ -8,36 +8,105 @@ $page_title = "Return Book & Fine Processing";
 $msg = '';
 $error = '';
 $issue_details = null;
+$member_issues = [];
 
-// Search issued record by Accession Number or Issue ID
-if (isset($_GET['search_accession']) && !empty($_GET['search_accession'])) {
-    $search = sanitize_input($_GET['search_accession']);
+$search_type = sanitize_input($_GET['search_type'] ?? 'accession');
+$search_query = sanitize_input($_GET['search_query'] ?? '');
+
+// Search issued record by selected search type (accession, member_number, member_name, book_title)
+if (!empty($search_query)) {
+    if ($search_type === 'accession') {
+        $sql = "SELECT i.*, b.BookName, b.BookNumber, m.MemberName, mt.IssueFineAmount
+                FROM TransBookIssue i
+                LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber OR i.BookNumber = CAST(b.BookNumber AS CHAR)
+                LEFT JOIN MstrMember m ON i.MemberNumber = m.MemberNumber
+                LEFT JOIN ExcelMemberMaster em ON m.MemberNumber = em.MemberNumber
+                LEFT JOIN MstrMemberType mt ON COALESCE(em.MemberTypeNumber, 1) = mt.MemberTypeNumber
+                WHERE (i.AccessionNumber = ? OR b.AccessionNumber = ?) AND i.IssueStatus = 1
+                ORDER BY i.IssueID DESC LIMIT 1";
+        $res = db_query($conn, $sql, "ss", [$search_query, $search_query]);
+        if ($res && db_num_rows($res) > 0) {
+            $issue_details = db_fetch_assoc($res);
+        } else {
+            $error = "No active issued book found with Accession Number '$search_query'.";
+        }
+    } else {
+        // Multi-record search (by Member Number, Member Name, or Book Title)
+        $where = "i.IssueStatus = 1";
+        $params = [];
+        $types = "";
+
+        if ($search_type === 'member_number') {
+            $where .= " AND (i.MemberNumber = ? OR m.MemberNumber = ?)";
+            $params = [intval($search_query), intval($search_query)];
+            $types = "ii";
+        } elseif ($search_type === 'member_name') {
+            $where .= " AND (m.MemberName LIKE ? OR i.MemberName LIKE ?)";
+            $sq = "%$search_query%";
+            $params = [$sq, $sq];
+            $types = "ss";
+        } elseif ($search_type === 'book_title') {
+            $where .= " AND b.BookName LIKE ?";
+            $sq = "%$search_query%";
+            $params = [$sq];
+            $types = "s";
+        }
+
+        $sql = "SELECT i.*, b.BookName, b.BookNumber, m.MemberName, mt.IssueFineAmount
+                FROM TransBookIssue i
+                LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber OR i.BookNumber = CAST(b.BookNumber AS CHAR)
+                LEFT JOIN MstrMember m ON i.MemberNumber = m.MemberNumber
+                LEFT JOIN ExcelMemberMaster em ON m.MemberNumber = em.MemberNumber
+                LEFT JOIN MstrMemberType mt ON COALESCE(em.MemberTypeNumber, 1) = mt.MemberTypeNumber
+                WHERE $where ORDER BY i.IssueID DESC LIMIT 20";
+        $res = db_query($conn, $sql, $types, $params);
+        if ($res && db_num_rows($res) > 0) {
+            while ($r = db_fetch_assoc($res)) {
+                $due = strtotime($r['DueDate']);
+                $today = strtotime(date('Y-m-d'));
+                $overdue_days = ($today > $due) ? ceil(($today - $due) / (60 * 60 * 24)) : 0;
+                $fine_rate = floatval($r['IssueFineAmount'] ?? 1.0);
+                $r['overdue_days'] = $overdue_days;
+                $r['calculated_fine'] = $overdue_days * $fine_rate;
+                $member_issues[] = $r;
+            }
+            if (count($member_issues) === 1) {
+                $issue_details = $member_issues[0];
+            }
+        } else {
+            $error = "No active issued books found matching criteria.";
+        }
+    }
+
+    if ($issue_details) {
+        $due = strtotime($issue_details['DueDate']);
+        $today = strtotime(date('Y-m-d'));
+        $overdue_days = ($today > $due) ? ceil(($today - $due) / (60 * 60 * 24)) : 0;
+        $fine_rate = floatval($issue_details['IssueFineAmount'] ?? 1.0);
+        $issue_details['overdue_days'] = $overdue_days;
+        $issue_details['calculated_fine'] = $overdue_days * $fine_rate;
+    }
+}
+
+// Select specific Issue ID from search results
+if (isset($_GET['select_issue_id'])) {
+    $issue_id = intval($_GET['select_issue_id']);
     $sql = "SELECT i.*, b.BookName, b.BookNumber, m.MemberName, mt.IssueFineAmount
             FROM TransBookIssue i
-            LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber
+            LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber OR i.BookNumber = CAST(b.BookNumber AS CHAR)
             LEFT JOIN MstrMember m ON i.MemberNumber = m.MemberNumber
             LEFT JOIN ExcelMemberMaster em ON m.MemberNumber = em.MemberNumber
             LEFT JOIN MstrMemberType mt ON COALESCE(em.MemberTypeNumber, 1) = mt.MemberTypeNumber
-            WHERE (i.AccessionNumber = ? OR b.AccessionNumber = ?) AND i.IssueStatus = 1
-            ORDER BY i.IssueID DESC LIMIT 1";
-    $res = db_query($conn, $sql, "ss", [$search, $search]);
+            WHERE i.IssueID = ? AND i.IssueStatus = 1 LIMIT 1";
+    $res = db_query($conn, $sql, "i", [$issue_id]);
     if ($res && db_num_rows($res) > 0) {
         $issue_details = db_fetch_assoc($res);
-
-        // Calculate Overdue Days and Accrued Fine
         $due = strtotime($issue_details['DueDate']);
         $today = strtotime(date('Y-m-d'));
-        $overdue_days = 0;
-        if ($today > $due) {
-            $overdue_days = ceil(($today - $due) / (60 * 60 * 24));
-        }
+        $overdue_days = ($today > $due) ? ceil(($today - $due) / (60 * 60 * 24)) : 0;
         $fine_rate = floatval($issue_details['IssueFineAmount'] ?? 1.0);
-        $calculated_fine = $overdue_days * $fine_rate;
-
         $issue_details['overdue_days'] = $overdue_days;
-        $issue_details['calculated_fine'] = $calculated_fine;
-    } else {
-        $error = "No active issued book found with Accession Number '$search'.";
+        $issue_details['calculated_fine'] = $overdue_days * $fine_rate;
     }
 }
 
@@ -83,16 +152,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         $msg = "Book returned successfully!" . ($collected_amount > 0 ? " Financial receipt voucher generated for fine collection of ₹" . number_format($collected_amount, 2) : "");
+        $issue_details = null;
+        $member_issues = [];
     } else {
         $error = "Failed to process book return.";
     }
 }
 
+// Fetch all active checkouts for quick selection table
+$all_active = db_query($conn, "SELECT i.*, b.BookName, m.MemberName
+                               FROM TransBookIssue i
+                               LEFT JOIN MstrBookStock b ON i.AccessionNumber = b.AccessionNumber OR i.BookNumber = CAST(b.BookNumber AS CHAR)
+                               LEFT JOIN MstrMember m ON i.MemberNumber = m.MemberNumber
+                               WHERE i.IssueStatus = 1 ORDER BY i.IssueID DESC LIMIT 15");
+
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
 <div class="row justify-content-center">
-    <div class="col-md-9">
+    <div class="col-md-10">
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white">
                 <h4 class="mb-0"><i class="fa-solid fa-rotate-left me-2"></i>Book Return & Overdue Fine Engine</h4>
@@ -105,24 +183,83 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="alert alert-danger alert-dismissible fade show"><i class="fa-solid fa-triangle-exclamation me-2"></i><?php echo $error; ?><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
                 <?php endif; ?>
 
-                <!-- Lookup Widget -->
+                <!-- Lookup Widget with Multiple Search Options -->
                 <form method="GET" action="return.php" class="row g-3">
-                    <div class="col-md-9">
-                        <label class="form-label fw-bold">Scan / Enter Accession Number *</label>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold small">Search By</label>
+                        <select name="search_type" class="form-select">
+                            <option value="accession" <?php echo $search_type === 'accession' ? 'selected' : ''; ?>>Accession Number</option>
+                            <option value="member_number" <?php echo $search_type === 'member_number' ? 'selected' : ''; ?>>Member Number</option>
+                            <option value="member_name" <?php echo $search_type === 'member_name' ? 'selected' : ''; ?>>Member Name</option>
+                            <option value="book_title" <?php echo $search_type === 'book_title' ? 'selected' : ''; ?>>Book Title</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">Search Term / Value *</label>
                         <div class="input-group">
-                            <span class="input-group-text"><i class="fa-solid fa-barcode"></i></span>
-                            <input type="text" name="search_accession" class="form-control form-control-lg" placeholder="e.g. ACC1001" required value="<?php echo htmlspecialchars($_GET['search_accession'] ?? ''); ?>">
+                            <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+                            <input type="text" name="search_query" class="form-control" placeholder="Enter Accession No, Member ID, Name or Title..." required value="<?php echo htmlspecialchars($search_query); ?>">
                         </div>
                     </div>
                     <div class="col-md-3 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="fa-solid fa-search me-1"></i>Lookup Issue</button>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fa-solid fa-search me-1"></i>Lookup Active Checkouts</button>
                     </div>
                 </form>
             </div>
         </div>
 
+        <?php if (count($member_issues) > 1 && !$issue_details): ?>
+            <!-- Multiple Results View -->
+            <div class="card shadow mb-4">
+                <div class="card-header bg-warning text-dark fw-bold">
+                    <i class="fa-solid fa-list-check me-2"></i>Multiple Active Checkouts Found (<?php echo count($member_issues); ?>)
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Accession #</th>
+                                    <th>Book Title</th>
+                                    <th>Member Name</th>
+                                    <th>Issue Date</th>
+                                    <th>Due Date</th>
+                                    <th>Fine Amount</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($member_issues as $mi): ?>
+                                    <tr>
+                                        <td><span class="badge bg-secondary"><?php echo htmlspecialchars($mi['AccessionNumber'] ?? $mi['BookNumber']); ?></span></td>
+                                        <td><strong><?php echo htmlspecialchars($mi['BookName'] ?? 'N/A'); ?></strong></td>
+                                        <td><?php echo htmlspecialchars($mi['MemberName']); ?></td>
+                                        <td><?php echo date('d-M-Y', strtotime($mi['IssueDate'])); ?></td>
+                                        <td><?php echo date('d-M-Y', strtotime($mi['DueDate'])); ?></td>
+                                        <td>
+                                            <?php if ($mi['overdue_days'] > 0): ?>
+                                                <span class="badge bg-danger">₹<?php echo number_format($mi['calculated_fine'], 2); ?> (<?php echo $mi['overdue_days']; ?> days)</span>
+                                            <?php else: ?>
+                                                <span class="badge bg-success">₹0.00</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="return.php?select_issue_id=<?php echo $mi['IssueID']; ?>" class="btn btn-sm btn-primary">
+                                                <i class="fa-solid fa-arrow-right me-1"></i>Select & Process
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <?php if ($issue_details): ?>
-            <div class="card border-primary shadow">
+            <!-- Active Checkout Return Form -->
+            <div class="card border-primary shadow mb-4">
                 <div class="card-header bg-primary text-white fw-bold">
                     <i class="fa-solid fa-circle-info me-2"></i>Active Checkout Summary
                 </div>
@@ -181,6 +318,52 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
             </div>
         <?php endif; ?>
+
+        <!-- Active Checkouts Quick Pick Table -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fa-solid fa-clock-rotate-left me-2"></i>Recent Active Checkouts</h5>
+                <a href="/modules/circulation/issued_list.php" class="btn btn-sm btn-outline-light">View All Checkouts</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th>Issue #</th>
+                                <th>Accession #</th>
+                                <th>Book Title</th>
+                                <th>Borrower Member</th>
+                                <th>Issue Date</th>
+                                <th>Due Date</th>
+                                <th class="text-end">Quick Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($all_active && db_num_rows($all_active) > 0): ?>
+                                <?php while ($ac = db_fetch_assoc($all_active)): ?>
+                                    <tr>
+                                        <td><code>#<?php echo $ac['IssueID']; ?></code></td>
+                                        <td><span class="badge bg-secondary"><?php echo htmlspecialchars($ac['AccessionNumber'] ?? $ac['BookNumber']); ?></span></td>
+                                        <td><strong><?php echo htmlspecialchars($ac['BookName'] ?? 'N/A'); ?></strong></td>
+                                        <td><?php echo htmlspecialchars($ac['MemberName']); ?></td>
+                                        <td><?php echo date('d-M-Y', strtotime($ac['IssueDate'])); ?></td>
+                                        <td><?php echo date('d-M-Y', strtotime($ac['DueDate'])); ?></td>
+                                        <td class="text-end">
+                                            <a href="return.php?select_issue_id=<?php echo $ac['IssueID']; ?>" class="btn btn-sm btn-primary">
+                                                <i class="fa-solid fa-rotate-left me-1"></i>Process Return
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endwhile; ?>
+                            <?php else: ?>
+                                <tr><td colspan="7" class="text-center text-muted py-4">No active checkouts currently outstanding.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
