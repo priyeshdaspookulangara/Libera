@@ -80,11 +80,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'search_books') {
         $types .= "d";
     }
 
-    $sql = "SELECT b.BookNumber, b.BookName, b.BookRemarks, b.BookCode, b.CallNumber, b.AccessionNumber, b.BookPrice, b.BookStatus,
+    $sql = "SELECT b.BookNumber, b.BookName, b.BookRemarks, b.BookCode, b.CallNumber, b.AccessionNumber, b.ISBNumber, b.BookPrice, b.BookStatus,
                    COALESCE(a.AuthorName, 'Unknown') as AutherName,
+                   COALESCE(p.PublisherName, 'Unassigned') as PublisherName,
+                   COALESCE(cat.CategoryName, 'General') as CategoryName,
                    COALESCE(c.ClassName, 'General') as BookClass
             FROM MstrBookStock b
             LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
+            LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
+            LEFT JOIN MstrCategory cat ON b.CategoryNumber = cat.CategoryNumber
             LEFT JOIN MstrClassification c ON b.ClassNumber = c.ClassNumber
             WHERE " . implode(" AND ", $where) . " ORDER BY b.BookNumber DESC LIMIT 50";
 
@@ -336,13 +340,13 @@ require_once __DIR__ . '/../../includes/header.php';
                     <table class="table table-hover table-striped align-middle mb-0">
                         <thead class="table-secondary">
                             <tr>
-                                <th>Book #</th>
-                                <th>Accession #</th>
+                                <th>Call #</th>
                                 <th>Book Title</th>
                                 <th>Author</th>
-                                <th>Class</th>
-                                <th>Code / Call #</th>
-                                <th>Price</th>
+                                <th>Publisher</th>
+                                <th>Barcode / Code</th>
+                                <th>Category / Class</th>
+                                <th>Acc #</th>
                                 <th>Status</th>
                                 <th class="text-end">Action</th>
                             </tr>
@@ -391,13 +395,13 @@ document.addEventListener("DOMContentLoaded", function() {
                         const selectBtn = `<button type="button" class="btn btn-sm btn-primary select-res-book-btn" data-accession="${book.AccessionNumber}"><i class="fa-solid fa-check me-1"></i>Select for Reservation</button>`;
 
                         html += `<tr>
-                            <td><code>#${book.BookNumber}</code></td>
-                            <td><strong>${book.AccessionNumber || 'N/A'}</strong></td>
-                            <td class="fw-bold">${escapeHtml(book.BookName || '')}</td>
+                            <td><span class="badge bg-light text-dark border font-monospace">${escapeHtml(book.CallNumber || 'N/A')}</span></td>
+                            <td class="fw-bold text-primary">${escapeHtml(book.BookName || '')}</td>
                             <td>${escapeHtml(book.AutherName || '')}</td>
-                            <td><span class="badge bg-light text-dark border">${escapeHtml(book.BookClass || '')}</span></td>
-                            <td><small>${escapeHtml(book.BookCode || '')} / ${escapeHtml(book.CallNumber || '')}</small></td>
-                            <td>₹${parseFloat(book.BookPrice || 0).toFixed(2)}</td>
+                            <td><small class="text-secondary">${escapeHtml(book.PublisherName || 'N/A')}</small></td>
+                            <td><code class="text-dark bg-light px-1 border">${escapeHtml(book.BookCode || 'N/A')}</code></td>
+                            <td><small class="badge bg-secondary">${escapeHtml(book.CategoryName || book.BookClass || '')}</small></td>
+                            <td><strong>${book.AccessionNumber || 'N/A'}</strong></td>
                             <td>${statusBadge}</td>
                             <td class="text-end">${selectBtn}</td>
                         </tr>`;

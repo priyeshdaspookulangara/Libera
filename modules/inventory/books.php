@@ -21,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add' || $action === 'edit') {
         $book_name = sanitize_input($_POST['BookName'] ?? '');
         $accession = sanitize_input($_POST['AccessionNumber'] ?? '');
+        $book_code = sanitize_input($_POST['BookCode'] ?? ''); // Barcode / Item Code
         $isbn = sanitize_input($_POST['ISBNumber'] ?? '');
         $call_num = sanitize_input($_POST['CallNumber'] ?? '');
         $author_id = !empty($_POST['AuthorNumber']) ? intval($_POST['AuthorNumber']) : null;
@@ -35,12 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($book_name) || empty($accession)) {
             $error = "Book Title and Accession Number are required fields.";
         } else {
+            if (empty($book_code)) {
+                $book_code = 'B' . str_pad(rand(1, 99999), 5, '0', STR_PAD_LEFT);
+            }
             if ($action === 'add') {
                 $check = db_query($conn, "SELECT BookNumber FROM MstrBookStock WHERE AccessionNumber = ?", "s", [$accession]);
                 if ($check && db_num_rows($check) > 0) {
                     $error = "Accession Number '$accession' already exists!";
                 } else {
-                    $book_code = 'B' . str_pad(rand(1, 99999), 5, '0', STR_PAD_LEFT);
                     $sql = "INSERT INTO MstrBookStock (BookName, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                     $res = db_query($conn, $sql, "sissssiiiidii", [$book_name, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
                     if ($res) {
@@ -51,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } elseif ($action === 'edit') {
                 $book_id = intval($_POST['BookNumber']);
-                $sql = "UPDATE MstrBookStock SET BookName = ?, BookStatus = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
-                $res = db_query($conn, $sql, "sissssiiiidiii", [$book_name, $status, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
+                $sql = "UPDATE MstrBookStock SET BookName = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
+                $res = db_query($conn, $sql, "sisssssiiiidiii", [$book_name, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
                 if ($res !== false) {
                     $msg = "Book details updated successfully.";
                 } else {
@@ -207,10 +210,10 @@ require_once __DIR__ . '/../../includes/header.php';
     }
 
     if (!empty($search)) {
-        $where[] = "(b.BookName LIKE ? OR b.AccessionNumber LIKE ? OR b.ISBNumber LIKE ? OR a.AuthorName LIKE ? OR b.BookRemarks LIKE ?)";
+        $where[] = "(b.BookName LIKE ? OR b.AccessionNumber LIKE ? OR b.ISBNumber LIKE ? OR b.BookCode LIKE ? OR b.CallNumber LIKE ? OR a.AuthorName LIKE ? OR p.PublisherName LIKE ? OR c.CategoryName LIKE ? OR b.BookRemarks LIKE ?)";
         $sp = "%$search%";
-        $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp;
-        $types .= "sssss";
+        $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp;
+        $types .= "sssssssss";
     }
 
     $where_sql = count($where) > 0 ? " WHERE " . implode(" AND ", $where) : "";
@@ -263,11 +266,15 @@ require_once __DIR__ . '/../../includes/header.php';
                 <table class="table table-hover table-striped align-middle mb-0">
                     <thead class="table-dark">
                         <tr>
-                            <th>Acc No.</th>
-                            <th>Book Title & Details</th>
+                            <th class="text-center" style="width: 50px;">Sl No.</th>
+                            <th>Call Number</th>
+                            <th>Book Name</th>
                             <th>Author</th>
-                            <th>Class / Category</th>
-                            <th>Price</th>
+                            <th>Publisher</th>
+                            <th>Barcode</th>
+                            <th>ISBN</th>
+                            <th>Category</th>
+                            <th>Acc No.</th>
                             <th>Status</th>
                             <th>Remarks / Condition</th>
                             <th class="text-end">Actions</th>
@@ -275,21 +282,30 @@ require_once __DIR__ . '/../../includes/header.php';
                     </thead>
                     <tbody>
                         <?php if ($books_result && db_num_rows($books_result) > 0): ?>
-                            <?php while ($b = db_fetch_assoc($books_result)): ?>
+                            <?php
+                            $sl_no = 1;
+                            while ($b = db_fetch_assoc($books_result)):
+                            ?>
                                 <tr>
-                                    <td><span class="badge bg-dark font-monospace"><?php echo htmlspecialchars($b['AccessionNumber'] ?? 'N/A'); ?></span></td>
+                                    <td class="text-center fw-bold text-muted"><?php echo $sl_no++; ?></td>
+                                    <td><span class="badge bg-light text-dark border font-monospace"><?php echo htmlspecialchars(!empty($b['CallNumber']) ? $b['CallNumber'] : 'N/A'); ?></span></td>
                                     <td>
-                                        <strong><?php echo htmlspecialchars($b['BookName']); ?></strong>
-                                        <div class="text-muted small">
-                                            ISBN: <?php echo htmlspecialchars($b['ISBNumber'] ?? 'N/A'); ?> | Call: <?php echo htmlspecialchars($b['CallNumber'] ?? 'N/A'); ?>
-                                        </div>
+                                        <strong class="text-primary"><?php echo htmlspecialchars($b['BookName']); ?></strong>
                                     </td>
                                     <td><?php echo htmlspecialchars($b['AuthorName'] ?? 'Unassigned'); ?></td>
                                     <td>
-                                        <div><?php echo htmlspecialchars($b['ClassName'] ?? 'General Class'); ?></div>
-                                        <small class="text-muted"><i class="fa-solid fa-tag me-1"></i><?php echo htmlspecialchars($b['CategoryName'] ?? 'General'); ?></small>
+                                        <span class="text-secondary"><?php echo htmlspecialchars($b['PublisherName'] ?? 'N/A'); ?></span>
                                     </td>
-                                    <td>₹<?php echo number_format($b['BookPrice'] ?? 0, 2); ?></td>
+                                    <td>
+                                        <code class="text-dark bg-light px-2 py-1 rounded border"><i class="fa-solid fa-barcode me-1 text-muted"></i><?php echo htmlspecialchars(!empty($b['BookCode']) ? $b['BookCode'] : 'N/A'); ?></code>
+                                    </td>
+                                    <td>
+                                        <span class="font-monospace small"><?php echo htmlspecialchars(!empty($b['ISBNumber']) ? $b['ISBNumber'] : 'N/A'); ?></span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary"><i class="fa-solid fa-tag me-1"></i><?php echo htmlspecialchars($b['CategoryName'] ?? 'General'); ?></span>
+                                    </td>
+                                    <td><span class="badge bg-dark font-monospace"><?php echo htmlspecialchars($b['AccessionNumber'] ?? 'N/A'); ?></span></td>
                                     <td>
                                         <?php if ($b['BookStatus'] == 1): ?>
                                             <span class="badge bg-success">Available</span>
@@ -375,18 +391,22 @@ require_once __DIR__ . '/../../includes/header.php';
                                                 </div>
                                                 <div class="modal-body row g-3">
                                                     <div class="col-md-8">
-                                                        <label class="form-label fw-bold small">Book Title *</label>
+                                                        <label class="form-label fw-bold small">Book Title / Name *</label>
                                                         <input type="text" name="BookName" class="form-control" required value="<?php echo htmlspecialchars($b['BookName']); ?>">
                                                     </div>
                                                     <div class="col-md-4">
                                                         <label class="form-label fw-bold small">Accession Number *</label>
                                                         <input type="text" name="AccessionNumber" class="form-control" required value="<?php echo htmlspecialchars($b['AccessionNumber']); ?>">
                                                     </div>
-                                                    <div class="col-md-4">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label fw-bold small">Barcode / Item Code</label>
+                                                        <input type="text" name="BookCode" class="form-control" value="<?php echo htmlspecialchars($b['BookCode'] ?? ''); ?>" placeholder="e.g. B00123">
+                                                    </div>
+                                                    <div class="col-md-3">
                                                         <label class="form-label fw-bold small">ISBN</label>
                                                         <input type="text" name="ISBNumber" class="form-control" value="<?php echo htmlspecialchars($b['ISBNumber']); ?>">
                                                     </div>
-                                                    <div class="col-md-4">
+                                                    <div class="col-md-3">
                                                         <label class="form-label fw-bold small">Call Number</label>
                                                         <input type="text" name="CallNumber" class="form-control" value="<?php echo htmlspecialchars($b['CallNumber']); ?>">
                                                     </div>
@@ -493,10 +513,11 @@ require_once __DIR__ . '/../../includes/header.php';
         $curr_class_res = db_query($conn, "SELECT * FROM MstrClassification WHERE ClassNumber = ?", "i", [$filter_class]);
         $curr_class = db_fetch_assoc($curr_class_res);
 
-        $selected_class_books = db_query($conn, "SELECT b.*, a.AuthorName, p.PublisherName
+        $selected_class_books = db_query($conn, "SELECT b.*, a.AuthorName, p.PublisherName, c.CategoryName
                                                 FROM MstrBookStock b
                                                 LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
                                                 LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
+                                                LEFT JOIN MstrCategory c ON b.CategoryNumber = c.CategoryNumber
                                                 WHERE b.ClassNumber = ?
                                                 ORDER BY b.BookName ASC", "i", [$filter_class]);
     }
@@ -552,20 +573,31 @@ require_once __DIR__ . '/../../includes/header.php';
                             <table class="table table-hover table-striped align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Acc No.</th>
-                                        <th>Title</th>
+                                        <th class="text-center" style="width: 40px;">Sl No.</th>
+                                        <th>Call No.</th>
+                                        <th>Name</th>
                                         <th>Author</th>
-                                        <th>Price</th>
+                                        <th>Publisher</th>
+                                        <th>Barcode</th>
+                                        <th>ISBN</th>
+                                        <th>Category</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php while ($cb = db_fetch_assoc($selected_class_books)): ?>
+                                    <?php
+                                    $c_sl = 1;
+                                    while ($cb = db_fetch_assoc($selected_class_books)):
+                                    ?>
                                         <tr>
-                                            <td><code><?php echo htmlspecialchars($cb['AccessionNumber']); ?></code></td>
+                                            <td class="text-center fw-bold text-muted"><?php echo $c_sl++; ?></td>
+                                            <td><span class="badge bg-light text-dark border font-monospace"><?php echo htmlspecialchars(!empty($cb['CallNumber']) ? $cb['CallNumber'] : 'N/A'); ?></span></td>
                                             <td><strong><?php echo htmlspecialchars($cb['BookName']); ?></strong></td>
                                             <td><?php echo htmlspecialchars($cb['AuthorName'] ?? 'Unassigned'); ?></td>
-                                            <td>₹<?php echo number_format($cb['BookPrice'], 2); ?></td>
+                                            <td><span class="text-secondary"><?php echo htmlspecialchars($cb['PublisherName'] ?? 'N/A'); ?></span></td>
+                                            <td><code class="text-dark bg-light px-1 border"><?php echo htmlspecialchars(!empty($cb['BookCode']) ? $cb['BookCode'] : 'N/A'); ?></code></td>
+                                            <td><small class="font-monospace"><?php echo htmlspecialchars(!empty($cb['ISBNumber']) ? $cb['ISBNumber'] : 'N/A'); ?></small></td>
+                                            <td><span class="badge bg-secondary"><?php echo htmlspecialchars($cb['CategoryName'] ?? 'General'); ?></span></td>
                                             <td>
                                                 <?php if ($cb['BookStatus'] == 1): ?>
                                                     <span class="badge bg-success">Available</span>
@@ -612,10 +644,11 @@ require_once __DIR__ . '/../../includes/header.php';
         $curr_cat_res = db_query($conn, "SELECT * FROM MstrCategory WHERE CategoryNumber = ?", "i", [$filter_cat]);
         $curr_cat = db_fetch_assoc($curr_cat_res);
 
-        $selected_cat_books = db_query($conn, "SELECT b.*, a.AuthorName, p.PublisherName
+        $selected_cat_books = db_query($conn, "SELECT b.*, a.AuthorName, p.PublisherName, c.CategoryName
                                               FROM MstrBookStock b
                                               LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
                                               LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
+                                              LEFT JOIN MstrCategory c ON b.CategoryNumber = c.CategoryNumber
                                               WHERE b.CategoryNumber = ?
                                               ORDER BY b.BookName ASC", "i", [$filter_cat]);
     }
@@ -668,20 +701,31 @@ require_once __DIR__ . '/../../includes/header.php';
                             <table class="table table-hover table-striped align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Acc No.</th>
-                                        <th>Title</th>
+                                        <th class="text-center" style="width: 40px;">Sl No.</th>
+                                        <th>Call No.</th>
+                                        <th>Name</th>
                                         <th>Author</th>
-                                        <th>Price</th>
+                                        <th>Publisher</th>
+                                        <th>Barcode</th>
+                                        <th>ISBN</th>
+                                        <th>Acc No.</th>
                                         <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php while ($cb = db_fetch_assoc($selected_cat_books)): ?>
+                                    <?php
+                                    $cat_sl = 1;
+                                    while ($cb = db_fetch_assoc($selected_cat_books)):
+                                    ?>
                                         <tr>
-                                            <td><code><?php echo htmlspecialchars($cb['AccessionNumber']); ?></code></td>
+                                            <td class="text-center fw-bold text-muted"><?php echo $cat_sl++; ?></td>
+                                            <td><span class="badge bg-light text-dark border font-monospace"><?php echo htmlspecialchars(!empty($cb['CallNumber']) ? $cb['CallNumber'] : 'N/A'); ?></span></td>
                                             <td><strong><?php echo htmlspecialchars($cb['BookName']); ?></strong></td>
                                             <td><?php echo htmlspecialchars($cb['AuthorName'] ?? 'Unassigned'); ?></td>
-                                            <td>₹<?php echo number_format($cb['BookPrice'], 2); ?></td>
+                                            <td><span class="text-secondary"><?php echo htmlspecialchars($cb['PublisherName'] ?? 'N/A'); ?></span></td>
+                                            <td><code class="text-dark bg-light px-1 border"><?php echo htmlspecialchars(!empty($cb['BookCode']) ? $cb['BookCode'] : 'N/A'); ?></code></td>
+                                            <td><small class="font-monospace"><?php echo htmlspecialchars(!empty($cb['ISBNumber']) ? $cb['ISBNumber'] : 'N/A'); ?></small></td>
+                                            <td><span class="badge bg-dark font-monospace"><?php echo htmlspecialchars($cb['AccessionNumber']); ?></span></td>
                                             <td>
                                                 <?php if ($cb['BookStatus'] == 1): ?>
                                                     <span class="badge bg-success">Available</span>
@@ -843,22 +887,26 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
                 <div class="modal-body row g-3">
                     <div class="col-md-8">
-                        <label class="form-label fw-bold small">Book Title *</label>
+                        <label class="form-label fw-bold small">Book Title / Name *</label>
                         <input type="text" name="BookName" class="form-control" placeholder="Enter full title" required>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold small">Accession Number *</label>
                         <input type="text" name="AccessionNumber" class="form-control" placeholder="e.g. ACC1009" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold small">Barcode / Item Code</label>
+                        <input type="text" name="BookCode" class="form-control" placeholder="Auto-generated if blank">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label fw-bold small">ISBN</label>
                         <input type="text" name="ISBNumber" class="form-control" placeholder="ISBN-10 or ISBN-13">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-bold small">Call Number</label>
                         <input type="text" name="CallNumber" class="form-control" placeholder="e.g. A0009">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-bold small">Price (₹)</label>
                         <input type="number" step="0.01" name="BookPrice" class="form-control" placeholder="0.00">
                     </div>
