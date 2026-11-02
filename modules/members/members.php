@@ -22,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $aadhar = sanitize_input($_POST['AadharNumber'] ?? '');
         $email = sanitize_input($_POST['MemberEmail'] ?? '');
         $term_date = !empty($_POST['TerminationDate']) ? sanitize_input($_POST['TerminationDate']) : null;
+        $doj = !empty($_POST['MemberJoinDate']) ? sanitize_input($_POST['MemberJoinDate']) : date('Y-m-d');
         $guardian = sanitize_input($_POST['GuardianName'] ?? '');
         $remarks = sanitize_input($_POST['MemberRemarks'] ?? '');
         $member_type_id = intval($_POST['MemberTypeNumber'] ?? 1);
@@ -44,10 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($res1 && isset($res1['insert_id'])) {
                     $mem_id = $res1['insert_id'];
 
-                    // Insert Details including optional attributes
-                    $today = date('Y-m-d');
+                    // Insert Details including optional attributes & DOJ
                     $sql2 = "INSERT INTO MstrMemberDetails (MemberNumber, GuardianName, RegistrationFees, MemberJoinDate, ApprovedDate, MemberAge, BloodGroupStr, AadharNumber, MemberEmail, TerminationDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                    db_query($conn, $sql2, "isdssissss", [$mem_id, $guardian, $reg_fee, $today, $today, $age, $blood, $aadhar, $email, $term_date]);
+                    db_query($conn, $sql2, "isdssissss", [$mem_id, $guardian, $reg_fee, $doj, $doj, $age, $blood, $aadhar, $email, $term_date]);
 
                     // Automatically generate balanced Double-Entry Accounting Voucher for Registration & Subscription Fee Collection
                     if ($total_collected > 0) {
@@ -81,8 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sql1 = "UPDATE MstrMember SET MemberName = ?, PhoneHome = ?, HouseName = ?, StudentSex = ?, MemBirthDate = ?, MemberRemarks = ? WHERE MemberNumber = ?";
                 db_query($conn, $sql1, "ssssssi", [$name, $phone, $house, $sex, $dob, $remarks, $mem_id]);
 
-                $sql2 = "UPDATE MstrMemberDetails SET GuardianName = ?, MemberAge = ?, BloodGroupStr = ?, AadharNumber = ?, MemberEmail = ?, TerminationDate = ? WHERE MemberNumber = ?";
-                db_query($conn, $sql2, "sissssi", [$guardian, $age, $blood, $aadhar, $email, $term_date, $mem_id]);
+                $sql2 = "UPDATE MstrMemberDetails SET GuardianName = ?, MemberJoinDate = ?, MemberAge = ?, BloodGroupStr = ?, AadharNumber = ?, MemberEmail = ?, TerminationDate = ? WHERE MemberNumber = ?";
+                db_query($conn, $sql2, "ssissssi", [$guardian, $doj, $age, $blood, $aadhar, $email, $term_date, $mem_id]);
 
                 $msg = "Member details updated successfully.";
             }
@@ -145,12 +145,13 @@ require_once __DIR__ . '/../../includes/header.php';
                 <thead class="table-dark">
                     <tr>
                         <th>Member #</th>
-                        <th>Member Name</th>
+                        <th>Member Name & Guardian</th>
+                        <th>Address</th>
                         <th>Phone / Email</th>
-                        <th>Age / Blood</th>
+                        <th>DOB / Age / Blood</th>
                         <th>Aadhaar #</th>
-                        <th>Joined Date</th>
-                        <th>Termination</th>
+                        <th>Date of Join (DOJ)</th>
+                        <th>Status</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -162,7 +163,14 @@ require_once __DIR__ . '/../../includes/header.php';
                                 <td>
                                     <strong><?php echo htmlspecialchars($m['MemberName']); ?></strong>
                                     <?php if (!empty($m['GuardianName'])): ?>
-                                        <br><small class="text-muted">C/o: <?php echo htmlspecialchars($m['GuardianName']); ?></small>
+                                        <br><small class="text-muted"><i class="fa-solid fa-shield-halved me-1"></i>C/o: <?php echo htmlspecialchars($m['GuardianName']); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if (!empty($m['HouseName'])): ?>
+                                        <small><i class="fa-solid fa-location-dot text-secondary me-1"></i><?php echo htmlspecialchars($m['HouseName']); ?></small>
+                                    <?php else: ?>
+                                        <span class="text-muted small">None</span>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -176,12 +184,19 @@ require_once __DIR__ . '/../../includes/header.php';
                                     <?php if (!empty($m['BloodGroupStr'])): ?>
                                         <span class="badge bg-danger ms-1"><?php echo htmlspecialchars($m['BloodGroupStr']); ?></span>
                                     <?php endif; ?>
+                                    <?php if (!empty($m['MemBirthDate'])): ?>
+                                        <br><small class="text-muted">DOB: <?php echo date('d-M-Y', strtotime($m['MemBirthDate'])); ?></small>
+                                    <?php endif; ?>
                                 </td>
                                 <td><code><?php echo htmlspecialchars($m['AadharNumber'] ?? 'N/A'); ?></code></td>
-                                <td><?php echo $m['MemberJoinDate'] ? date('d-M-Y', strtotime($m['MemberJoinDate'])) : 'N/A'; ?></td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="fa-regular fa-calendar-check text-success me-1"></i><?php echo $m['MemberJoinDate'] ? date('d-M-Y', strtotime($m['MemberJoinDate'])) : 'N/A'; ?>
+                                    </span>
+                                </td>
                                 <td>
                                     <?php if (!empty($m['TerminationDate'])): ?>
-                                        <span class="badge bg-secondary"><?php echo date('d-M-Y', strtotime($m['TerminationDate'])); ?></span>
+                                        <span class="badge bg-secondary" title="Terminated on <?php echo date('d-M-Y', strtotime($m['TerminationDate'])); ?>">Terminated</span>
                                     <?php else: ?>
                                         <span class="badge bg-success">Active</span>
                                     <?php endif; ?>
@@ -251,12 +266,16 @@ require_once __DIR__ . '/../../includes/header.php';
                                                     </select>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">Termination Date</label>
-                                                    <input type="date" name="TerminationDate" class="form-control" value="<?php echo !empty($m['TerminationDate']) ? date('Y-m-d', strtotime($m['TerminationDate'])) : ''; ?>">
+                                                    <label class="form-label fw-bold small">Date of Join (DOJ)</label>
+                                                    <input type="date" name="MemberJoinDate" class="form-control" value="<?php echo !empty($m['MemberJoinDate']) ? date('Y-m-d', strtotime($m['MemberJoinDate'])) : date('Y-m-d'); ?>">
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">House Name / Address</label>
-                                                    <input type="text" name="HouseName" class="form-control" value="<?php echo htmlspecialchars($m['HouseName'] ?? ''); ?>">
+                                                    <label class="form-label fw-bold small">Termination Date (If applicable)</label>
+                                                    <input type="date" name="TerminationDate" class="form-control" value="<?php echo !empty($m['TerminationDate']) ? date('Y-m-d', strtotime($m['TerminationDate'])) : ''; ?>">
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-label fw-bold small">Address / House Name</label>
+                                                    <input type="text" name="HouseName" class="form-control" placeholder="Street / House Address" value="<?php echo htmlspecialchars($m['HouseName'] ?? ''); ?>">
                                                 </div>
                                                 <div class="col-12">
                                                     <label class="form-label fw-bold small">Remarks</label>
@@ -354,12 +373,16 @@ require_once __DIR__ . '/../../includes/header.php';
                         </select>
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label fw-bold small">Date of Join (DOJ) *</label>
+                        <input type="date" name="MemberJoinDate" class="form-control" value="<?php echo date('Y-m-d'); ?>" required>
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label fw-bold small">Termination Date (If applicable)</label>
                         <input type="date" name="TerminationDate" class="form-control">
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold small">House Name / Address</label>
-                        <input type="text" name="HouseName" class="form-control" placeholder="Street / House Address">
+                    <div class="col-12">
+                        <label class="form-label fw-bold small">Address / House Name</label>
+                        <input type="text" name="HouseName" class="form-control" placeholder="Street, House Name, City, PIN Code">
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-bold small">Remarks</label>
