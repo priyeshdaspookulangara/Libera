@@ -17,6 +17,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $house = sanitize_input($_POST['HouseName'] ?? '');
         $sex = sanitize_input($_POST['StudentSex'] ?? 'Male');
         $dob = sanitize_input($_POST['MemBirthDate'] ?? '');
+        $age = !empty($_POST['MemberAge']) ? intval($_POST['MemberAge']) : null;
+        $blood = sanitize_input($_POST['BloodGroupStr'] ?? '');
+        $aadhar = sanitize_input($_POST['AadharNumber'] ?? '');
+        $email = sanitize_input($_POST['MemberEmail'] ?? '');
+        $term_date = !empty($_POST['TerminationDate']) ? sanitize_input($_POST['TerminationDate']) : null;
         $guardian = sanitize_input($_POST['GuardianName'] ?? '');
         $remarks = sanitize_input($_POST['MemberRemarks'] ?? '');
         $member_type_id = intval($_POST['MemberTypeNumber'] ?? 1);
@@ -39,10 +44,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($res1 && isset($res1['insert_id'])) {
                     $mem_id = $res1['insert_id'];
 
-                    // Insert Details
+                    // Insert Details including optional attributes
                     $today = date('Y-m-d');
-                    $sql2 = "INSERT INTO MstrMemberDetails (MemberNumber, GuardianName, RegistrationFees, MemberJoinDate, ApprovedDate) VALUES (?, ?, ?, ?, ?)";
-                    db_query($conn, $sql2, "isdss", [$mem_id, $guardian, $reg_fee, $today, $today]);
+                    $sql2 = "INSERT INTO MstrMemberDetails (MemberNumber, GuardianName, RegistrationFees, MemberJoinDate, ApprovedDate, MemberAge, BloodGroupStr, AadharNumber, MemberEmail, TerminationDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    db_query($conn, $sql2, "isdssissss", [$mem_id, $guardian, $reg_fee, $today, $today, $age, $blood, $aadhar, $email, $term_date]);
 
                     // Automatically generate balanced Double-Entry Accounting Voucher for Registration & Subscription Fee Collection
                     if ($total_collected > 0) {
@@ -54,7 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $res_head = db_query($conn, "INSERT INTO TransLedgerHead (TransactionDate, TransTypeNumber, YearNumber, TransactionRemarks, MemberNumber) VALUES (?, 14, ?, ?, ?)", "sisi", [$trans_date, $year_num, "Member Reg Fee - " . $name, $mem_id]);
                         $head_id = $res_head['insert_id'] ?? 1;
 
-                        // Post AccTransaction Debit Cash (Ledger 1), Credit Reg Fee Income (Ledger 10014) & Membership Deposit/Subscription Income (10013)
                         if ($reg_fee > 0) {
                             db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10014, ?, ?, ?)", "isids", [$head_id, $trans_date, $mem_id, $reg_fee, "Reg Fee"]);
                             db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, ?, 0, ?)", "isids", [$head_id, $trans_date, $mem_id, $reg_fee, "Cash Reg Fee"]);
@@ -77,8 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sql1 = "UPDATE MstrMember SET MemberName = ?, PhoneHome = ?, HouseName = ?, StudentSex = ?, MemBirthDate = ?, MemberRemarks = ? WHERE MemberNumber = ?";
                 db_query($conn, $sql1, "ssssssi", [$name, $phone, $house, $sex, $dob, $remarks, $mem_id]);
 
-                $sql2 = "UPDATE MstrMemberDetails SET GuardianName = ? WHERE MemberNumber = ?";
-                db_query($conn, $sql2, "si", [$guardian, $mem_id]);
+                $sql2 = "UPDATE MstrMemberDetails SET GuardianName = ?, MemberAge = ?, BloodGroupStr = ?, AadharNumber = ?, MemberEmail = ?, TerminationDate = ? WHERE MemberNumber = ?";
+                db_query($conn, $sql2, "sissssi", [$guardian, $age, $blood, $aadhar, $email, $term_date, $mem_id]);
 
                 $msg = "Member details updated successfully.";
             }
@@ -93,13 +97,13 @@ $params = [];
 $types = "";
 
 if (!empty($search)) {
-    $where = " WHERE m.MemberName LIKE ? OR m.PhoneHome LIKE ? OR m.HouseName LIKE ? ";
+    $where = " WHERE m.MemberName LIKE ? OR m.PhoneHome LIKE ? OR m.HouseName LIKE ? OR d.AadharNumber LIKE ? OR d.MemberEmail LIKE ? ";
     $sp = "%$search%";
-    $params = [$sp, $sp, $sp];
-    $types = "sss";
+    $params = [$sp, $sp, $sp, $sp, $sp];
+    $types = "sssss";
 }
 
-$sql_members = "SELECT m.*, d.GuardianName, d.RegistrationFees, d.MemberJoinDate
+$sql_members = "SELECT m.*, d.GuardianName, d.RegistrationFees, d.MemberJoinDate, d.MemberAge, d.BloodGroupStr, d.AadharNumber, d.MemberEmail, d.TerminationDate
                 FROM MstrMember m
                 LEFT JOIN MstrMemberDetails d ON m.MemberNumber = d.MemberNumber
                 $where
@@ -125,7 +129,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="card-body">
         <form method="GET" action="members.php" class="row g-3">
             <div class="col-md-10">
-                <input type="text" name="search" class="form-control" placeholder="Search by Member Name, Phone Number, or Address..." value="<?php echo htmlspecialchars($search); ?>">
+                <input type="text" name="search" class="form-control" placeholder="Search by Member Name, Phone, Aadhaar, Email, or Address..." value="<?php echo htmlspecialchars($search); ?>">
             </div>
             <div class="col-md-2">
                 <button type="submit" class="btn btn-secondary w-100"><i class="fa-solid fa-search me-1"></i>Search</button>
@@ -142,10 +146,11 @@ require_once __DIR__ . '/../../includes/header.php';
                     <tr>
                         <th>Member #</th>
                         <th>Member Name</th>
-                        <th>Guardian</th>
-                        <th>Phone</th>
-                        <th>House / Address</th>
+                        <th>Phone / Email</th>
+                        <th>Age / Blood</th>
+                        <th>Aadhaar #</th>
                         <th>Joined Date</th>
+                        <th>Termination</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -154,11 +159,33 @@ require_once __DIR__ . '/../../includes/header.php';
                         <?php while ($m = db_fetch_assoc($members_res)): ?>
                             <tr>
                                 <td><span class="badge bg-primary">MEM-<?php echo str_pad($m['MemberNumber'], 4, '0', STR_PAD_LEFT); ?></span></td>
-                                <td><strong><?php echo htmlspecialchars($m['MemberName']); ?></strong></td>
-                                <td><?php echo htmlspecialchars($m['GuardianName'] ?? 'N/A'); ?></td>
-                                <td><?php echo htmlspecialchars($m['PhoneHome'] ?? 'N/A'); ?></td>
-                                <td><?php echo htmlspecialchars($m['HouseName'] ?? 'N/A'); ?></td>
+                                <td>
+                                    <strong><?php echo htmlspecialchars($m['MemberName']); ?></strong>
+                                    <?php if (!empty($m['GuardianName'])): ?>
+                                        <br><small class="text-muted">C/o: <?php echo htmlspecialchars($m['GuardianName']); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php echo htmlspecialchars($m['PhoneHome'] ?? 'N/A'); ?>
+                                    <?php if (!empty($m['MemberEmail'])): ?>
+                                        <br><small class="text-muted"><?php echo htmlspecialchars($m['MemberEmail']); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php echo !empty($m['MemberAge']) ? $m['MemberAge'] . ' yrs' : 'N/A'; ?>
+                                    <?php if (!empty($m['BloodGroupStr'])): ?>
+                                        <span class="badge bg-danger ms-1"><?php echo htmlspecialchars($m['BloodGroupStr']); ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><code><?php echo htmlspecialchars($m['AadharNumber'] ?? 'N/A'); ?></code></td>
                                 <td><?php echo $m['MemberJoinDate'] ? date('d-M-Y', strtotime($m['MemberJoinDate'])) : 'N/A'; ?></td>
+                                <td>
+                                    <?php if (!empty($m['TerminationDate'])): ?>
+                                        <span class="badge bg-secondary"><?php echo date('d-M-Y', strtotime($m['TerminationDate'])); ?></span>
+                                    <?php else: ?>
+                                        <span class="badge bg-success">Active</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="text-end">
                                     <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#editMemberModal<?php echo $m['MemberNumber']; ?>">
                                         <i class="fa-solid fa-pen"></i> Edit
@@ -191,6 +218,14 @@ require_once __DIR__ . '/../../includes/header.php';
                                                     <input type="text" name="PhoneHome" class="form-control" value="<?php echo htmlspecialchars($m['PhoneHome'] ?? ''); ?>">
                                                 </div>
                                                 <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">Email Address</label>
+                                                    <input type="email" name="MemberEmail" class="form-control" value="<?php echo htmlspecialchars($m['MemberEmail'] ?? ''); ?>">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">Aadhaar Number</label>
+                                                    <input type="text" name="AadharNumber" class="form-control" placeholder="12-digit UIDAI" value="<?php echo htmlspecialchars($m['AadharNumber'] ?? ''); ?>">
+                                                </div>
+                                                <div class="col-md-3">
                                                     <label class="form-label fw-bold small">Gender</label>
                                                     <select name="StudentSex" class="form-select">
                                                         <option value="Male" <?php echo ($m['StudentSex'] === 'Male') ? 'selected' : ''; ?>>Male</option>
@@ -198,11 +233,28 @@ require_once __DIR__ . '/../../includes/header.php';
                                                         <option value="Other" <?php echo ($m['StudentSex'] === 'Other') ? 'selected' : ''; ?>>Other</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-md-3">
                                                     <label class="form-label fw-bold small">Date of Birth</label>
                                                     <input type="date" name="MemBirthDate" class="form-control" value="<?php echo $m['MemBirthDate'] ? date('Y-m-d', strtotime($m['MemBirthDate'])) : ''; ?>">
                                                 </div>
-                                                <div class="col-12">
+                                                <div class="col-md-3">
+                                                    <label class="form-label fw-bold small">Age</label>
+                                                    <input type="number" name="MemberAge" class="form-control" value="<?php echo htmlspecialchars($m['MemberAge'] ?? ''); ?>">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label fw-bold small">Blood Group</label>
+                                                    <select name="BloodGroupStr" class="form-select">
+                                                        <option value="">-- None --</option>
+                                                        <?php foreach (['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as $bg): ?>
+                                                            <option value="<?php echo $bg; ?>" <?php echo (($m['BloodGroupStr'] ?? '') === $bg) ? 'selected' : ''; ?>><?php echo $bg; ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">Termination Date</label>
+                                                    <input type="date" name="TerminationDate" class="form-control" value="<?php echo !empty($m['TerminationDate']) ? date('Y-m-d', strtotime($m['TerminationDate'])) : ''; ?>">
+                                                </div>
+                                                <div class="col-md-6">
                                                     <label class="form-label fw-bold small">House Name / Address</label>
                                                     <input type="text" name="HouseName" class="form-control" value="<?php echo htmlspecialchars($m['HouseName'] ?? ''); ?>">
                                                 </div>
@@ -221,7 +273,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             </div>
                         <?php endwhile; ?>
                     <?php else: ?>
-                        <tr><td colspan="7" class="text-center text-muted py-4">No member profiles found.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-4">No member profiles found.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -264,6 +316,14 @@ require_once __DIR__ . '/../../includes/header.php';
                         <input type="text" name="PhoneHome" class="form-control" placeholder="10-digit mobile">
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label fw-bold small">Email Address</label>
+                        <input type="email" name="MemberEmail" class="form-control" placeholder="e.g. member@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">Aadhaar Card Number</label>
+                        <input type="text" name="AadharNumber" class="form-control" placeholder="12-digit Aadhaar UIDAI">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label fw-bold small">Gender</label>
                         <select name="StudentSex" class="form-select">
                             <option value="Male">Male</option>
@@ -271,11 +331,33 @@ require_once __DIR__ . '/../../includes/header.php';
                             <option value="Other">Other</option>
                         </select>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-3">
                         <label class="form-label fw-bold small">Date of Birth</label>
                         <input type="date" name="MemBirthDate" class="form-control">
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold small">Age</label>
+                        <input type="number" name="MemberAge" class="form-control" placeholder="Age in years">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold small">Blood Group</label>
+                        <select name="BloodGroupStr" class="form-select">
+                            <option value="">-- None --</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">Termination Date (If applicable)</label>
+                        <input type="date" name="TerminationDate" class="form-control">
+                    </div>
+                    <div class="col-md-6">
                         <label class="form-label fw-bold small">House Name / Address</label>
                         <input type="text" name="HouseName" class="form-control" placeholder="Street / House Address">
                     </div>
