@@ -275,10 +275,21 @@ $current_page = $_SERVER['PHP_SELF'];
                 <a href="/modules/accounts/reports.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/accounts/reports.php') ? 'active' : ''; ?>">Financial Reports</a>
             </div>
 
-            <!-- Analytics Link -->
-            <a href="/modules/reports/analytics.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/reports/analytics.php') ? 'active' : ''; ?>">
-                <i class="fa-solid fa-chart-line menu-icon text-secondary"></i> Circulation Analytics
+            <!-- Reports Section Accordion -->
+            <a class="sidebar-nav-link d-flex justify-content-between align-items-center <?php echo (strpos($current_page, '/reports/') !== false) ? 'active' : ''; ?>" data-bs-toggle="collapse" href="#menuReports">
+                <span><i class="fa-solid fa-file-invoice menu-icon text-secondary"></i> Official Reports</span>
+                <i class="fa-solid fa-chevron-down small"></i>
             </a>
+            <div class="collapse <?php echo (strpos($current_page, '/reports/') !== false) ? 'show' : ''; ?> sidebar-submenu" id="menuReports">
+                <a href="/modules/reports/library_reports.php?type=issue_register" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'issue_register') ? 'active' : ''; ?>">Issue Register</a>
+                <a href="/modules/reports/library_reports.php?type=stock_register" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'stock_register') ? 'active' : ''; ?>">Book Stock Register</a>
+                <a href="/modules/reports/library_reports.php?type=category_books" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'category_books') ? 'active' : ''; ?>">Category Wise Books</a>
+                <a href="/modules/reports/library_reports.php?type=lost_damaged" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'lost_damaged') ? 'active' : ''; ?>">Lost / Damaged List</a>
+                <a href="/modules/reports/library_reports.php?type=member_register" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'member_register') ? 'active' : ''; ?>">Member Register</a>
+                <a href="/modules/reports/library_reports.php?type=member_due" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'member_due') ? 'active' : ''; ?>">Member Due List</a>
+                <a href="/modules/reports/library_reports.php?type=fine_list" class="sidebar-nav-link <?php echo (isset($_GET['type']) && $_GET['type'] == 'fine_list') ? 'active' : ''; ?>">Fine Register</a>
+                <a href="/modules/reports/analytics.php" class="sidebar-nav-link <?php echo ($current_page == '/modules/reports/analytics.php') ? 'active' : ''; ?>">Circulation Analytics</a>
+            </div>
         </nav>
     </aside>
 

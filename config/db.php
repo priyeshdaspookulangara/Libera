@@ -68,6 +68,18 @@ function db_rollback($conn) {
     }
 }
 
+function db_escape($conn, $string) {
+    global $db_driver;
+    if (!$conn) return addslashes($string);
+    if ($db_driver === 'mysqli') {
+        return mysqli_real_escape_string($conn, (string)$string);
+    } else {
+        // SQLite PDO quote wraps in quotes, trim them for LIKE queries or substring escaping
+        $quoted = $conn->quote((string)$string);
+        return trim($quoted, "'");
+    }
+}
+
 /**
  * Execute SQL query with parameter binding across MySQLi or SQLite PDO
  */
