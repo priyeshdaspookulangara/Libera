@@ -2,6 +2,7 @@
 // modules/inventory/books.php - Library Catalog & Inventory Management with Top Tabs
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../manglish_helper.php';
 require_login();
 
 $page_title = "Library Catalog & Stock";
@@ -39,13 +40,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($book_code)) {
                 $book_code = 'B' . str_pad(rand(1, 99999), 5, '0', STR_PAD_LEFT);
             }
+            // Look up author name if author_id is specified to generate author_search_key
+            $author_name = '';
+            if ($author_id) {
+                $ares = db_query($conn, "SELECT AuthorName FROM MstrAuthor WHERE AuthorNumber = ?", "i", [$author_id]);
+                if ($ares && ($arow = db_fetch_assoc($ares))) {
+                    $author_name = $arow['AuthorName'] ?? '';
+                }
+            }
+            $title_key = generate_manglish_key($book_name);
+            $author_key = generate_manglish_key($author_name);
+
             if ($action === 'add') {
                 $check = db_query($conn, "SELECT BookNumber FROM MstrBookStock WHERE AccessionNumber = ?", "s", [$accession]);
                 if ($check && db_num_rows($check) > 0) {
                     $error = "Accession Number '$accession' already exists!";
                 } else {
-                    $sql = "INSERT INTO MstrBookStock (BookName, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                    $res = db_query($conn, $sql, "sissssiiiidii", [$book_name, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
+                    $sql = "INSERT INTO MstrBookStock (BookName, title_search_key, author_search_key, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    $res = db_query($conn, $sql, "sssissssiiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
                     if ($res) {
                         $msg = "Book added successfully to catalog stock.";
                     } else {
@@ -54,8 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } elseif ($action === 'edit') {
                 $book_id = intval($_POST['BookNumber']);
-                $sql = "UPDATE MstrBookStock SET BookName = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
-                $res = db_query($conn, $sql, "sisssssiiiidiii", [$book_name, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
+                $sql = "UPDATE MstrBookStock SET BookName = ?, title_search_key = ?, author_search_key = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
+                $res = db_query($conn, $sql, "sssisssssiiiidiii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
                 if ($res !== false) {
                     $msg = "Book details updated successfully.";
                 } else {
