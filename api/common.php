@@ -77,7 +77,7 @@ function require_api_auth() {
         send_json_error("Unauthorized. Bearer token missing.", 401);
     }
 
-    // Verify token against ApiTokens table (using standard MySQL NOW() compatible with SQLite driver wrapper)
+    // Verify token against ApiTokens table in MySQL
     $res = db_query($conn, "SELECT t.*, u.UserName, u.UserLevelNumber
                            FROM ApiTokens t
                            JOIN MstrUsers u ON t.UserNumber = u.UserNumber

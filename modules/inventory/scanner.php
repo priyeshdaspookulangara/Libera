@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $issue_res = db_query($conn, "SELECT * FROM TransBookIssue WHERE AccessionNumber = ? AND IssueStatus = 1 ORDER BY IssueID DESC LIMIT 1", "s", [$scanned_item['AccessionNumber']]);
                     if ($issue_res && db_num_rows($issue_res) > 0) {
                         $issue = db_fetch_assoc($issue_res);
-                        db_query($conn, "UPDATE TransBookIssue SET ReturnDate = datetime('now'), IssueStatus = 2 WHERE IssueID = ?", "i", [$issue['IssueID']]);
+                        db_query($conn, "UPDATE TransBookIssue SET ReturnDate = NOW(), IssueStatus = 2 WHERE IssueID = ?", "i", [$issue['IssueID']]);
                         db_query($conn, "UPDATE MstrBookStock SET BookStatus = 1 WHERE BookNumber = ?", "i", [$scanned_item['BookNumber']]);
                         $msg = "FAST CHECK-IN COMPLETE: '{$scanned_item['BookName']}' returned to stock.";
                         $scanned_item['BookStatus'] = 1;
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $mem_res = db_query($conn, "SELECT MemberName FROM MstrMember WHERE MemberNumber = ? LIMIT 1", "i", [$member_id]);
                         $m_name = ($mem_res && db_num_rows($mem_res) > 0) ? db_fetch_assoc($mem_res)['MemberName'] : 'Member';
                         $due = date('Y-m-d 23:59:59', strtotime('+14 days'));
-                        db_query($conn, "INSERT INTO TransBookIssue (IssueDate, DueDate, BookNumber, AccessionNumber, MemberNumber, MemberName, IssueStatus) VALUES (datetime('now'), ?, ?, ?, ?, ?, 1)", "sssis", [$due, $scanned_item['BookNumber'], $scanned_item['AccessionNumber'], $member_id, $m_name]);
+                        db_query($conn, "INSERT INTO TransBookIssue (IssueDate, DueDate, BookNumber, AccessionNumber, MemberNumber, MemberName, IssueStatus) VALUES (NOW(), ?, ?, ?, ?, ?, 1)", "sssis", [$due, $scanned_item['BookNumber'], $scanned_item['AccessionNumber'], $member_id, $m_name]);
                         db_query($conn, "UPDATE MstrBookStock SET BookStatus = 2 WHERE BookNumber = ?", "i", [$scanned_item['BookNumber']]);
                         $msg = "FAST CHECK-OUT COMPLETE: '{$scanned_item['BookName']}' issued to $m_name.";
                         $scanned_item['BookStatus'] = 2;

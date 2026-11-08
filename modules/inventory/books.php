@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = "Accession Number '$accession' already exists!";
                 } else {
                     $sql = "INSERT INTO MstrBookStock (BookName, title_search_key, author_search_key, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                    $res = db_query($conn, $sql, "sssissssiiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
+                    $res = db_query($conn, $sql, "sssisssssiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
                     if ($res) {
                         $msg = "Book added successfully to catalog stock.";
                     } else {

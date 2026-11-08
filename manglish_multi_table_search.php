@@ -84,7 +84,7 @@ function search_books_and_authors($conn, $query, $limit = 50) {
         $types .= "ss";
     }
 
-    // For SQLite or MySQL without search key column filled, also search in lowercase transliterations if available
+    // Combine search clauses
     $where_sql = implode(" OR ", $where_clauses);
 
     $sql = "SELECT b.BookNumber,
