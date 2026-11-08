@@ -222,10 +222,33 @@ require_once __DIR__ . '/../../includes/header.php';
     }
 
     if (!empty($search)) {
-        $where[] = "(b.BookName LIKE ? OR b.AccessionNumber LIKE ? OR b.ISBNumber LIKE ? OR b.BookCode LIKE ? OR b.CallNumber LIKE ? OR a.AuthorName LIKE ? OR p.PublisherName LIKE ? OR c.CategoryName LIKE ? OR b.BookRemarks LIKE ?)";
+        $search_variations = get_manglish_search_variations($search);
+        $search_clauses = [
+            "b.BookName LIKE ?",
+            "b.AccessionNumber LIKE ?",
+            "b.ISBNumber LIKE ?",
+            "b.BookCode LIKE ?",
+            "b.CallNumber LIKE ?",
+            "a.AuthorName LIKE ?",
+            "p.PublisherName LIKE ?",
+            "c.CategoryName LIKE ?",
+            "b.BookRemarks LIKE ?"
+        ];
         $sp = "%$search%";
         $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp;
         $types .= "sssssssss";
+
+        // Also check phonetic search keys for all variations (e.g. mish, mis, etc.)
+        foreach ($search_variations as $var) {
+            $search_clauses[] = "b.title_search_key LIKE ?";
+            $search_clauses[] = "b.author_search_key LIKE ?";
+            $var_p = "%" . $var . "%";
+            $params[] = $var_p;
+            $params[] = $var_p;
+            $types .= "ss";
+        }
+
+        $where[] = "(" . implode(" OR ", $search_clauses) . ")";
     }
 
     $where_sql = count($where) > 0 ? " WHERE " . implode(" AND ", $where) : "";

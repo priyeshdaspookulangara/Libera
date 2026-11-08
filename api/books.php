@@ -38,24 +38,32 @@ $params = [];
 $types = "";
 
 if (!empty($search)) {
-    // Generate phonetic Manglish key for matching
-    $manglish_q = generate_manglish_key($search);
-    $m_prefix = $manglish_q . '%';
-    $m_anywhere = '%' . $manglish_q . '%';
+    // Generate phonetic Manglish variations for matching
+    $search_variations = get_manglish_search_variations($search);
+    $search_clauses = [
+        "b.BookName LIKE ?",
+        "b.AccessionNumber LIKE ?",
+        "b.ISBNumber LIKE ?",
+        "a.AuthorName LIKE ?",
+        "b.BookCode LIKE ?",
+        "b.CallNumber LIKE ?",
+        "b.BookRemarks LIKE ?"
+    ];
     $sp = "%$search%";
-
-    $where[] = "(b.BookName LIKE ? OR b.AccessionNumber LIKE ? OR b.ISBNumber LIKE ? OR a.AuthorName LIKE ? OR b.BookCode LIKE ? OR b.CallNumber LIKE ? OR b.BookRemarks LIKE ? OR b.title_search_key LIKE ? OR b.author_search_key LIKE ? OR b.title_search_key LIKE ? OR b.author_search_key LIKE ?)";
-    // 7 standard fields
     for ($i = 0; $i < 7; $i++) {
         $params[] = $sp;
         $types .= "s";
     }
-    // Manglish prefix & substring
-    $params[] = $m_prefix;
-    $params[] = $m_prefix;
-    $params[] = $m_anywhere;
-    $params[] = $m_anywhere;
-    $types .= "ssss";
+
+    foreach ($search_variations as $var) {
+        $search_clauses[] = "b.title_search_key LIKE ?";
+        $search_clauses[] = "b.author_search_key LIKE ?";
+        $params[] = "%" . $var . "%";
+        $params[] = "%" . $var . "%";
+        $types .= "ss";
+    }
+
+    $where[] = "(" . implode(" OR ", $search_clauses) . ")";
 }
 
 if ($book_id > 0) {
@@ -132,9 +140,10 @@ $sql_books = "SELECT b.BookNumber, b.BookName, b.AccessionNumber, b.ISBNumber, b
                  b.BookNumber DESC LIMIT 50";
 
 if (!empty($search)) {
+    $first_v = !empty($search_variations[0]) ? $search_variations[0] : $search;
     $types .= "ss";
-    $params[] = $m_prefix;
-    $params[] = $m_prefix;
+    $params[] = $first_v . "%";
+    $params[] = $first_v . "%";
 } else {
     $types .= "ss";
     $params[] = "%";
@@ -151,16 +160,27 @@ if ($res && db_num_rows($res) > 0) {
 
 // Fallback search in ExcelBookMaster if MstrBookStock had no matches
 if (empty($books) && !empty($search)) {
+    $e_clauses = ["e.BookName LIKE ?", "e.AutherName LIKE ?", "e.CallNumber LIKE ?", "e.BookCode LIKE ?"];
+    $e_params = ["%$search%", "%$search%", "%$search%", "%$search%"];
+    $e_types = "ssss";
+
+    foreach ($search_variations as $var) {
+        $e_clauses[] = "e.title_search_key LIKE ?";
+        $e_clauses[] = "e.author_search_key LIKE ?";
+        $e_params[] = "%" . $var . "%";
+        $e_params[] = "%" . $var . "%";
+        $e_types .= "ss";
+    }
+
     $excel_sql = "SELECT e.BookNumber, e.BookName, e.BookRemarks, e.AutherName, e.BookClass, e.BookCode, e.CallNumber, e.BookPrice, 1 as BookStatus,
                          e.title_search_key, e.author_search_key, e.publisher_id,
                          COALESCE(pub.publisher_name, p.PublisherName, 'N/A') as PublisherName
                   FROM ExcelBookMaster e
                   LEFT JOIN Publishers pub ON e.publisher_id = pub.publisher_id
                   LEFT JOIN MstrPublisher p ON e.publisher_id = p.PublisherNumber
-                  WHERE e.BookName LIKE ? OR e.AutherName LIKE ? OR e.title_search_key LIKE ? OR e.author_search_key LIKE ?
+                  WHERE " . implode(" OR ", $e_clauses) . "
                   ORDER BY e.BookNumber DESC LIMIT 50";
-    $e_params = ["%$search%", "%$search%", $m_prefix, $m_prefix];
-    $e_res = db_query($conn, $excel_sql, "ssss", $e_params);
+    $e_res = db_query($conn, $excel_sql, $e_types, $e_params);
     if ($e_res && db_num_rows($e_res) > 0) {
         while ($er = db_fetch_assoc($e_res)) {
             $er['AccessionNumber'] = $er['CallNumber'] ?? ('B' . $er['BookNumber']);
