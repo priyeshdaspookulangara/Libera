@@ -65,7 +65,7 @@ $res = db_query($conn, $query);
 $total = db_num_rows($res);
 echo "Found {$total} books in catalog.\n\n";
 
-// 3. Loop and update search keys
+// 3. Loop and update search keys for MstrBookStock
 echo "[3/3] Generating Manglish search keys and updating records...\n";
 
 $updated_count = 0;
@@ -87,10 +87,26 @@ while ($row = db_fetch_assoc($res)) {
     if ($upd !== false) {
         $updated_count++;
         if ($updated_count <= 10 || $updated_count % 50 === 0) {
-            echo "  [#{$book_id}] '{$book_name}' => '{$title_key}' | '{$author_name}' => '{$author_key}'\n";
+            echo "  [MstrBookStock #{$book_id}] '{$book_name}' => '{$title_key}' | '{$author_name}' => '{$author_key}'\n";
         }
     } else {
         $skipped_count++;
+    }
+}
+
+// Also populate ExcelBookMaster if records exist in ExcelBookMaster
+$excel_res = db_query($conn, "SELECT BookNumber, BookName, AutherName FROM ExcelBookMaster");
+if ($excel_res && db_num_rows($excel_res) > 0) {
+    echo "\nAlso updating " . db_num_rows($excel_res) . " records in legacy ExcelBookMaster table...\n";
+    $excel_upd_sql = "UPDATE ExcelBookMaster SET title_search_key = ?, author_search_key = ? WHERE BookNumber = ?";
+    while ($erow = db_fetch_assoc($excel_res)) {
+        $eb_id = $erow['BookNumber'];
+        $eb_title = $erow['BookName'] ?? '';
+        $eb_author = $erow['AutherName'] ?? '';
+        $et_key = generate_manglish_key($eb_title);
+        $ea_key = generate_manglish_key($eb_author);
+        db_query($conn, $excel_upd_sql, "ssi", [$et_key, $ea_key, $eb_id]);
+        $updated_count++;
     }
 }
 

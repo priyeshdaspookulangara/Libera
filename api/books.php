@@ -1,6 +1,7 @@
 <?php
 // api/books.php - Mobile Catalog & Book Stock REST API Endpoint
 require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/../manglish_helper.php';
 
 // Protect Endpoint
 $user = require_api_auth();
@@ -37,12 +38,24 @@ $params = [];
 $types = "";
 
 if (!empty($search)) {
-    $where[] = "(b.BookName LIKE ? OR b.AccessionNumber LIKE ? OR b.ISBNumber LIKE ? OR a.AuthorName LIKE ? OR b.BookCode LIKE ? OR b.CallNumber LIKE ? OR b.BookRemarks LIKE ?)";
+    // Generate phonetic Manglish key for matching
+    $manglish_q = generate_manglish_key($search);
+    $m_prefix = $manglish_q . '%';
+    $m_anywhere = '%' . $manglish_q . '%';
     $sp = "%$search%";
+
+    $where[] = "(b.BookName LIKE ? OR b.AccessionNumber LIKE ? OR b.ISBNumber LIKE ? OR a.AuthorName LIKE ? OR b.BookCode LIKE ? OR b.CallNumber LIKE ? OR b.BookRemarks LIKE ? OR b.title_search_key LIKE ? OR b.author_search_key LIKE ? OR b.title_search_key LIKE ? OR b.author_search_key LIKE ?)";
+    // 7 standard fields
     for ($i = 0; $i < 7; $i++) {
         $params[] = $sp;
         $types .= "s";
     }
+    // Manglish prefix & substring
+    $params[] = $m_prefix;
+    $params[] = $m_prefix;
+    $params[] = $m_anywhere;
+    $params[] = $m_anywhere;
+    $types .= "ssss";
 }
 
 if ($book_id > 0) {
@@ -52,9 +65,12 @@ if ($book_id > 0) {
 }
 
 if (!empty($book_name)) {
-    $where[] = "b.BookName LIKE ?";
+    $manglish_bn = generate_manglish_key($book_name);
+    $where[] = "(b.BookName LIKE ? OR b.title_search_key LIKE ? OR b.title_search_key LIKE ?)";
     $params[] = "%$book_name%";
-    $types .= "s";
+    $params[] = $manglish_bn . "%";
+    $params[] = "%" . $manglish_bn . "%";
+    $types .= "sss";
 }
 
 if (!empty($book_remarks)) {
@@ -64,9 +80,12 @@ if (!empty($book_remarks)) {
 }
 
 if (!empty($author_name)) {
-    $where[] = "a.AuthorName LIKE ?";
+    $manglish_an = generate_manglish_key($author_name);
+    $where[] = "(a.AuthorName LIKE ? OR b.author_search_key LIKE ? OR b.author_search_key LIKE ?)";
     $params[] = "%$author_name%";
-    $types .= "s";
+    $params[] = $manglish_an . "%";
+    $params[] = "%" . $manglish_an . "%";
+    $types .= "sss";
 }
 
 if (!empty($book_class)) {
@@ -96,6 +115,7 @@ if (!empty($book_price) && is_numeric($book_price)) {
 }
 
 $sql_books = "SELECT b.BookNumber, b.BookName, b.AccessionNumber, b.ISBNumber, b.BookCode, b.CallNumber, b.BookRemarks, b.BookPrice, b.BookStatus,
+                     b.title_search_key, b.author_search_key,
                      COALESCE(a.AuthorName, 'Unknown') as AutherName, COALESCE(a.AuthorName, 'Unknown') as AuthorName, p.PublisherName, c.CategoryName, COALESCE(cl.ClassName, 'General') as BookClass
               FROM MstrBookStock b
               LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
@@ -103,13 +123,46 @@ $sql_books = "SELECT b.BookNumber, b.BookName, b.AccessionNumber, b.ISBNumber, b
               LEFT JOIN MstrCategory c ON b.CategoryNumber = c.CategoryNumber
               LEFT JOIN MstrClassification cl ON b.ClassNumber = cl.ClassNumber
               WHERE " . implode(" AND ", $where) . "
-              ORDER BY b.BookNumber DESC LIMIT 50";
+              ORDER BY
+                 CASE
+                    WHEN b.title_search_key LIKE ? THEN 1
+                    WHEN b.author_search_key LIKE ? THEN 2
+                    ELSE 3
+                 END,
+                 b.BookNumber DESC LIMIT 50";
+
+if (!empty($search)) {
+    $types .= "ss";
+    $params[] = $m_prefix;
+    $params[] = $m_prefix;
+} else {
+    $types .= "ss";
+    $params[] = "%";
+    $params[] = "%";
+}
 
 $res = db_query($conn, $sql_books, $types, $params);
 $books = [];
 if ($res && db_num_rows($res) > 0) {
     while ($row = db_fetch_assoc($res)) {
         $books[] = $row;
+    }
+}
+
+// Fallback search in ExcelBookMaster if MstrBookStock had no matches
+if (empty($books) && !empty($search)) {
+    $excel_sql = "SELECT BookNumber, BookName, BookRemarks, AutherName, BookClass, BookCode, CallNumber, BookPrice, 1 as BookStatus,
+                         title_search_key, author_search_key
+                  FROM ExcelBookMaster
+                  WHERE BookName LIKE ? OR AutherName LIKE ? OR title_search_key LIKE ? OR author_search_key LIKE ?
+                  ORDER BY BookNumber DESC LIMIT 50";
+    $e_params = ["%$search%", "%$search%", $m_prefix, $m_prefix];
+    $e_res = db_query($conn, $excel_sql, "ssss", $e_params);
+    if ($e_res && db_num_rows($e_res) > 0) {
+        while ($er = db_fetch_assoc($e_res)) {
+            $er['AccessionNumber'] = $er['CallNumber'] ?? ('B' . $er['BookNumber']);
+            $books[] = $er;
+        }
     }
 }
 
