@@ -59,8 +59,11 @@ function require_api_auth() {
     $token = '';
 
     // Check Authorization: Bearer <token>
-    $headers = getallheaders();
-    $auth_header = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    $auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if (empty($auth_header) && function_exists('getallheaders')) {
+        $headers = getallheaders();
+        $auth_header = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    }
     if (preg_match('/Bearer\s+(\S+)/i', $auth_header, $matches)) {
         $token = $matches[1];
     }

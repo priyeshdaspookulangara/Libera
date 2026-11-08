@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($action === 'edit') {
                 $book_id = intval($_POST['BookNumber']);
                 $sql = "UPDATE MstrBookStock SET BookName = ?, title_search_key = ?, author_search_key = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
-                $res = db_query($conn, $sql, "sssisssssiiiidiii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
+                $res = db_query($conn, $sql, "sssisssssiiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
                 if ($res !== false) {
                     $msg = "Book details updated successfully.";
                 } else {
@@ -229,10 +229,14 @@ require_once __DIR__ . '/../../includes/header.php';
     }
 
     $where_sql = count($where) > 0 ? " WHERE " . implode(" AND ", $where) : "";
-    $sql_books = "SELECT b.*, a.AuthorName, p.PublisherName, c.CategoryName, lang.LanguageName, cl.ClassName, cl.ClassCode
+    $sql_books = "SELECT b.*, a.AuthorName, COALESsCE_PUB.PublisherName, c.CategoryName, lang.LanguageName, cl.ClassName, cl.ClassCode
                   FROM MstrBookStock b
                   LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
-                  LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
+                  LEFT JOIN (
+                      SELECT PublisherNumber, COALESCE(pub.publisher_name, p.PublisherName) as PublisherName
+                      FROM MstrPublisher p
+                      LEFT JOIN Publishers pub ON p.PublisherNumber = pub.publisher_id
+                  ) COALESsCE_PUB ON b.PublisherNumber = COALESsCE_PUB.PublisherNumber
                   LEFT JOIN MstrCategory c ON b.CategoryNumber = c.CategoryNumber
                   LEFT JOIN MstrLanguage lang ON b.LanguageNumber = lang.LanguageNumber
                   LEFT JOIN MstrClassification cl ON b.ClassNumber = cl.ClassNumber

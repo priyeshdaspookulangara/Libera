@@ -13,6 +13,7 @@
  *   "തകഴി"        -> "thakazhi"
  */
 
+if (!function_exists('generate_manglish_key')) {
 function generate_manglish_key($malayalam_text) {
     if ($malayalam_text === null || $malayalam_text === '') {
         return '';
@@ -243,4 +244,5 @@ function generate_manglish_key($malayalam_text) {
     $text = preg_replace('/\s+/', ' ', $text);
 
     return trim($text);
+}
 }

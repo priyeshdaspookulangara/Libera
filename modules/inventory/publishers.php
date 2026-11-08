@@ -16,9 +16,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = sanitize_input($_POST['PublisherCode'] ?? '');
         $place = sanitize_input($_POST['PublisherPlace'] ?? '');
         $phone = sanitize_input($_POST['PublisherPhone'] ?? '');
+        $email = sanitize_input($_POST['PublisherEmail'] ?? '');
+        $district = sanitize_input($_POST['PublisherDistrict'] ?? '');
         if (!empty($name)) {
             $sql = "INSERT INTO MstrPublisher (PublisherName, PublisherStatus, PublisherCode, PublisherPlace, PublisherPhone) VALUES (?, 1, ?, ?, ?)";
             $res = db_query($conn, $sql, "ssss", [$name, $code, $place, $phone]);
+
+            // Sync with Publishers table if available
+            db_query($conn, "INSERT INTO Publishers (publisher_name, email, place, district, phone) VALUES (?, ?, ?, ?, ?)", "sssss", [$name, $email, $place, $district, $phone]);
+
             if ($res) $msg = "Publisher added successfully.";
             else $error = "Failed to add publisher.";
         } else {
@@ -26,13 +32,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete') {
         $id = intval($_POST['PublisherNumber']);
+        $pRow = db_query($conn, "SELECT PublisherName FROM MstrPublisher WHERE PublisherNumber = ?", "i", [$id]);
+        $pName = ($pRow && $r = db_fetch_assoc($pRow)) ? $r['PublisherName'] : '';
         $res = db_query($conn, "DELETE FROM MstrPublisher WHERE PublisherNumber = ?", "i", [$id]);
+        if ($pName) {
+            db_query($conn, "DELETE FROM Publishers WHERE publisher_name = ?", "s", [$pName]);
+        }
         if ($res) $msg = "Publisher deleted.";
         else $error = "Could not delete publisher.";
     }
 }
 
-$publishers = db_query($conn, "SELECT * FROM MstrPublisher ORDER BY PublisherName ASC");
+// Fetch unified publishers
+$publishers = db_query($conn, "SELECT PublisherNumber, PublisherName, PublisherCode, PublisherPlace, PublisherPhone FROM MstrPublisher ORDER BY PublisherName ASC");
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -107,6 +119,14 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="col-md-6">
                         <label class="form-label fw-bold small">Phone</label>
                         <input type="text" name="PublisherPhone" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">Email</label>
+                        <input type="email" name="PublisherEmail" class="form-control" placeholder="info@publisher.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">District</label>
+                        <input type="text" name="PublisherDistrict" class="form-control" placeholder="Ernakulam">
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-bold small">Place / Location</label>

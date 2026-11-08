@@ -104,9 +104,9 @@ if ($action === 'issue') {
         $res_h = db_query($conn, "INSERT INTO TransLedgerHead (TransactionDate, TransTypeNumber, YearNumber, TransactionRemarks, MemberNumber) VALUES (?, 14, ?, ?, ?)", "sisi", [$today_date, $year_num, "API Fine Collection - {$checkout['AccessionNumber']}", $checkout['MemberNumber']]);
         $head_id = $res_h['insert_id'] ?? 1;
 
-        db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10012, ?, ?, 'API Fine Collection')", "isids", [$head_id, $today_date, $checkout['MemberNumber'], $collected_fine]);
-        db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, ?, 0, 'Cash Fine')", "isids", [$head_id, $today_date, $checkout['MemberNumber'], $collected_fine]);
-        db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, 0, ?, 'Fine Income')", "isids", [$head_id, $today_date, $checkout['MemberNumber'], $collected_fine]);
+        db_query($conn, "INSERT INTO AccTransaction (TransHeadNumber, TransTypeNumber, TransactionDate, LedgerNumberBook, LedgerNumberHead, MemberNumber, TransactionAmount, TransactionRemarks) VALUES (?, 14, ?, 1, 10012, ?, ?, 'API Fine Collection')", "isid", [$head_id, $today_date, $checkout['MemberNumber'], $collected_fine]);
+        db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, ?, 0, 'Cash Fine')", "isid", [$head_id, $today_date, $checkout['MemberNumber'], $collected_fine]);
+        db_query($conn, "INSERT INTO AccTransDetails (TransHeadNumber, TransTypeNumber, TransactionDate, MemberNumber, LedgerDebitAmount, LedgerCreditAmount, TransactionRemarks) VALUES (?, 14, ?, ?, 0, ?, 'Fine Income')", "isid", [$head_id, $today_date, $checkout['MemberNumber'], $collected_fine]);
     }
 
     send_json_success([

@@ -162,7 +162,22 @@ CREATE TABLE IF NOT EXISTS `ExcelBookMaster` (
 	`BookClass` text NULL,
 	`BookCode` text NULL,
 	`CallNumber` text NULL,
-	`BookPrice` double NULL
+	`BookPrice` double NULL,
+	`publisher_id` int NULL
+) ENGINE=InnoDB;
+
+-- Publishers (Enterprise / Custom Publisher Management)
+CREATE TABLE IF NOT EXISTS `Publishers` (
+	`publisher_id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+	`publisher_name` varchar(255) NOT NULL,
+	`email` varchar(150) NULL,
+	`address` text NULL,
+	`place` varchar(100) NULL,
+	`district` varchar(100) NULL,
+	`phone` varchar(50) NULL,
+	`login_name` varchar(100) NULL,
+	`password` varchar(255) NULL,
+	`created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
 -- ExcelMemberMaster

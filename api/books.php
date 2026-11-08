@@ -151,11 +151,14 @@ if ($res && db_num_rows($res) > 0) {
 
 // Fallback search in ExcelBookMaster if MstrBookStock had no matches
 if (empty($books) && !empty($search)) {
-    $excel_sql = "SELECT BookNumber, BookName, BookRemarks, AutherName, BookClass, BookCode, CallNumber, BookPrice, 1 as BookStatus,
-                         title_search_key, author_search_key
-                  FROM ExcelBookMaster
-                  WHERE BookName LIKE ? OR AutherName LIKE ? OR title_search_key LIKE ? OR author_search_key LIKE ?
-                  ORDER BY BookNumber DESC LIMIT 50";
+    $excel_sql = "SELECT e.BookNumber, e.BookName, e.BookRemarks, e.AutherName, e.BookClass, e.BookCode, e.CallNumber, e.BookPrice, 1 as BookStatus,
+                         e.title_search_key, e.author_search_key, e.publisher_id,
+                         COALESCE(pub.publisher_name, p.PublisherName, 'N/A') as PublisherName
+                  FROM ExcelBookMaster e
+                  LEFT JOIN Publishers pub ON e.publisher_id = pub.publisher_id
+                  LEFT JOIN MstrPublisher p ON e.publisher_id = p.PublisherNumber
+                  WHERE e.BookName LIKE ? OR e.AutherName LIKE ? OR e.title_search_key LIKE ? OR e.author_search_key LIKE ?
+                  ORDER BY e.BookNumber DESC LIMIT 50";
     $e_params = ["%$search%", "%$search%", $m_prefix, $m_prefix];
     $e_res = db_query($conn, $excel_sql, "ssss", $e_params);
     if ($e_res && db_num_rows($e_res) > 0) {
