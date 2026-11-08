@@ -229,6 +229,29 @@ require_once __DIR__ . '/../../includes/header.php';
     }
 
     $where_sql = count($where) > 0 ? " WHERE " . implode(" AND ", $where) : "";
+
+    // Count Total Books Matching Filter
+    $count_sql = "SELECT COUNT(*) as total FROM MstrBookStock b
+                  LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
+                  LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
+                  LEFT JOIN MstrCategory c ON b.CategoryNumber = c.CategoryNumber
+                  $where_sql";
+    $count_res = db_query($conn, $count_sql, $types, $params);
+    $total_books_count = ($count_res && $crow = db_fetch_assoc($count_res)) ? intval($crow['total']) : 0;
+
+    // Pagination Parameters
+    $per_page = isset($_GET['limit']) ? intval($_GET['limit']) : 100;
+    if ($per_page <= 0) $per_page = 100;
+    if ($per_page > 500) $per_page = 500; // safe upper bound per page
+
+    $current_page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+    if ($current_page < 1) $current_page = 1;
+    $total_pages = ceil($total_books_count / $per_page);
+    if ($total_pages < 1) $total_pages = 1;
+    if ($current_page > $total_pages) $current_page = $total_pages;
+
+    $offset = ($current_page - 1) * $per_page;
+
     $sql_books = "SELECT b.*, a.AuthorName, COALESsCE_PUB.PublisherName, c.CategoryName, lang.LanguageName, cl.ClassName, cl.ClassCode
                   FROM MstrBookStock b
                   LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
@@ -241,7 +264,7 @@ require_once __DIR__ . '/../../includes/header.php';
                   LEFT JOIN MstrLanguage lang ON b.LanguageNumber = lang.LanguageNumber
                   LEFT JOIN MstrClassification cl ON b.ClassNumber = cl.ClassNumber
                   $where_sql
-                  ORDER BY b.BookNumber DESC LIMIT 150";
+                  ORDER BY b.BookNumber DESC LIMIT $per_page OFFSET $offset";
 
     $books_result = db_query($conn, $sql_books, $types, $params);
     ?>
@@ -249,16 +272,27 @@ require_once __DIR__ . '/../../includes/header.php';
     <!-- Search & Filter Bar -->
     <div class="card mb-4">
         <div class="card-body">
-            <form method="GET" action="books.php" class="row g-3">
+            <form method="GET" action="books.php" class="row g-3 align-items-center">
                 <input type="hidden" name="tab" value="<?php echo htmlspecialchars($tab); ?>">
-                <div class="col-md-10">
+                <div class="col-md-7">
                     <div class="input-group">
                         <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
                         <input type="text" name="search" class="form-control" placeholder="Search by Book Title, Accession #, ISBN, Author, or Remarks..." value="<?php echo htmlspecialchars($search); ?>">
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="input-group">
+                        <span class="input-group-text small">Per Page</span>
+                        <select name="limit" class="form-select" onchange="this.form.submit()">
+                            <option value="50" <?php echo ($per_page == 50) ? 'selected' : ''; ?>>50 records</option>
+                            <option value="100" <?php echo ($per_page == 100) ? 'selected' : ''; ?>>100 records</option>
+                            <option value="250" <?php echo ($per_page == 250) ? 'selected' : ''; ?>>250 records</option>
+                            <option value="500" <?php echo ($per_page == 500) ? 'selected' : ''; ?>>500 records</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="col-md-2">
-                    <button type="submit" class="btn btn-secondary w-100"><i class="fa-solid fa-filter me-1"></i>Search</button>
+                    <button type="submit" class="btn btn-secondary w-100"><i class="fa-solid fa-filter me-1"></i>Filter</button>
                 </div>
             </form>
         </div>
@@ -275,7 +309,10 @@ require_once __DIR__ . '/../../includes/header.php';
                 else echo '<i class="fa-solid fa-list text-primary me-2"></i>Complete Book Catalog & Stock';
                 ?>
             </h5>
-            <span class="badge bg-light text-dark border">Found <?php echo ($books_result) ? db_num_rows($books_result) : 0; ?> titles</span>
+            <div>
+                <span class="badge bg-primary text-white me-2">Total: <?php echo number_format($total_books_count); ?> books</span>
+                <span class="badge bg-light text-dark border">Showing <?php echo min($total_books_count, $offset + 1); ?> - <?php echo min($total_books_count, $offset + $per_page); ?></span>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -299,7 +336,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <tbody>
                         <?php if ($books_result && db_num_rows($books_result) > 0): ?>
                             <?php
-                            $sl_no = 1;
+                            $sl_no = $offset + 1;
                             while ($b = db_fetch_assoc($books_result)):
                             ?>
                                 <tr>
@@ -507,6 +544,54 @@ require_once __DIR__ . '/../../includes/header.php';
                 </table>
             </div>
         </div>
+        <?php if ($total_pages > 1): ?>
+        <div class="card-footer bg-white py-3 d-flex justify-content-between align-items-center">
+            <div class="small text-muted">
+                Showing <strong><?php echo min($total_books_count, $offset + 1); ?></strong> to <strong><?php echo min($total_books_count, $offset + $per_page); ?></strong> of <strong><?php echo number_format($total_books_count); ?></strong> entries
+            </div>
+            <nav aria-label="Books navigation">
+                <ul class="pagination pagination-sm mb-0">
+                    <?php
+                    $search_param = !empty($search) ? '&search=' . urlencode($search) : '';
+                    $limit_param = '&limit=' . $per_page;
+                    $tab_param = '&tab=' . urlencode($tab);
+                    $base_url = "books.php?$tab_param$search_param$limit_param&page=";
+
+                    // First & Prev
+                    if ($current_page > 1):
+                    ?>
+                        <li class="page-item"><a class="page-link" href="<?php echo $base_url . '1'; ?>">&laquo; First</a></li>
+                        <li class="page-item"><a class="page-link" href="<?php echo $base_url . ($current_page - 1); ?>">Previous</a></li>
+                    <?php else: ?>
+                        <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
+                        <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                    <?php endif; ?>
+
+                    <?php
+                    // Window of 5 pages around current
+                    $start_p = max(1, $current_page - 2);
+                    $end_p = min($total_pages, $current_page + 2);
+                    for ($p = $start_p; $p <= $end_p; $p++):
+                    ?>
+                        <li class="page-item <?php echo ($p == $current_page) ? 'active' : ''; ?>">
+                            <a class="page-link" href="<?php echo $base_url . $p; ?>"><?php echo $p; ?></a>
+                        </li>
+                    <?php endfor; ?>
+
+                    <?php
+                    // Next & Last
+                    if ($current_page < $total_pages):
+                    ?>
+                        <li class="page-item"><a class="page-link" href="<?php echo $base_url . ($current_page + 1); ?>">Next</a></li>
+                        <li class="page-item"><a class="page-link" href="<?php echo $base_url . $total_pages; ?>">Last &raquo;</a></li>
+                    <?php else: ?>
+                        <li class="page-item disabled"><span class="page-link">Next</span></li>
+                        <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
+                    <?php endif; ?>
+                </ul>
+            </nav>
+        </div>
+        <?php endif; ?>
     </div>
 
 <?php elseif ($tab === 'class_wise'): ?>
