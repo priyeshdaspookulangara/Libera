@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../manglish_helper.php';
+require_once __DIR__ . '/../../manglish_multi_table_search.php';
 require_login();
 
 $page_title = "Library Catalog & Stock";
@@ -290,6 +291,45 @@ require_once __DIR__ . '/../../includes/header.php';
                   ORDER BY b.BookNumber DESC LIMIT $per_page OFFSET $offset";
 
     $books_result = db_query($conn, $sql_books, $types, $params);
+
+    // If search produced 0 results in MstrBookStock, fallback to ExcelBookMaster legacy table
+    $is_excel_fallback = false;
+    if ($total_books_count === 0 && !empty($search) && $tab === 'all') {
+        $excel_where = [
+            "e.BookName LIKE ?",
+            "e.AutherName LIKE ?",
+            "e.CallNumber LIKE ?",
+            "e.BookCode LIKE ?",
+            "e.BookRemarks LIKE ?"
+        ];
+        $e_params = ["%$search%", "%$search%", "%$search%", "%$search%", "%$search%"];
+        $e_types = "sssss";
+
+        foreach ($search_variations as $var) {
+            $excel_where[] = "e.title_search_key LIKE ?";
+            $excel_where[] = "e.author_search_key LIKE ?";
+            $e_params[] = "%" . $var . "%";
+            $e_params[] = "%" . $var . "%";
+            $e_types .= "ss";
+        }
+
+        $e_where_sql = implode(" OR ", $excel_where);
+        $count_excel_sql = "SELECT COUNT(*) as total FROM ExcelBookMaster e WHERE $e_where_sql";
+        $ce_res = db_query($conn, $count_excel_sql, $e_types, $e_params);
+        $total_books_count = ($ce_res && $cerow = db_fetch_assoc($ce_res)) ? intval($cerow['total']) : 0;
+
+        if ($total_books_count > 0) {
+            $is_excel_fallback = true;
+            $total_pages = ceil($total_books_count / $per_page);
+            if ($total_pages < 1) $total_pages = 1;
+            $sql_excel = "SELECT e.BookNumber, e.BookName, e.AutherName as AuthorName, e.CallNumber, e.BookCode, e.BookRemarks, e.BookPrice, 1 as BookStatus,
+                                 COALESCE(e.CallNumber, CONCAT('A', e.BookNumber)) as AccessionNumber, '' as ISBNumber, '' as PublisherName, '' as CategoryName
+                          FROM ExcelBookMaster e
+                          WHERE $e_where_sql
+                          ORDER BY e.BookNumber ASC LIMIT $per_page OFFSET $offset";
+            $books_result = db_query($conn, $sql_excel, $e_types, $e_params);
+        }
+    }
     ?>
 
     <!-- Search & Filter Bar -->
@@ -557,7 +597,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="8" class="text-center text-muted py-5">
+                                <td colspan="12" class="text-center text-muted py-5">
                                     <i class="fa-solid fa-folder-open fs-3 text-secondary mb-2 d-block"></i>
                                     No records found matching criteria in this view.
                                 </td>

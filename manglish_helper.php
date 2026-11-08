@@ -6,15 +6,20 @@
  * Converts Malayalam Unicode strings into normalized lowercase English phonetic representations
  * to enable search in English/Manglish for Malayalam titles and authors.
  *
- * Supports dual-phonetic variants for Malayalam phonemes like "ശ" / "ശ്ര" / "ഷ"
- * (e.g., matching both "sh" and "s", so "മിശ്രവിവാഹം" matches both "mish" and "mis").
+ * Supports dual-phonetic variants for Malayalam phonemes like:
+ *   - "ശ" / "ശ്ര" / "ഷ" (matching both "sh" and "s", so "മിശ്രവിവാഹം" matches both "mish" and "mis")
+ *   - Plural suffixes "-കൾ" (-kal / -gal)
+ *   - "ഴ" ("zh" and "l")
+ *   - "ത" / "ഥ" ("th" and "t")
+ *   - "വ" ("v" and "w")
  *
  * Examples:
  *   "മിശ്രവിവാഹം"  -> "mishravivaham misravivaham"
+ *   "കുരുവികൾ"    -> "kuruvikal kuruvigal"
+ *   "തകഴി"        -> "thakazhi thakali takazhi"
  *   "ഇന്ദുലേഖ"    -> "indulekha"
  *   "ചന്തുമേനോൻ"  -> "chandumenon"
- *   "ബഷീർ"       -> "basheer"
- *   "തകഴി"        -> "thakazhi"
+ *   "ബഷീർ"       -> "basheer basir"
  */
 
 if (!function_exists('generate_manglish_key')) {
@@ -33,8 +38,8 @@ function generate_manglish_key($malayalam_text) {
         return trim(preg_replace('/\s+/', ' ', $clean));
     }
 
-    // Transliterate function with flag for treating "ശ" / "ശ്ര" as "sh" or "s"
-    $transliterate = function($src, $sha_is_sh = true) {
+    // Transliterate function with flags for phonetic variants
+    $transliterate = function($src, $sha_is_sh = true, $kal_is_kal = true, $zha_is_zh = true) {
         $conjunct_bases = [
             'സ്ത്ത്യ' => 'sthy',
             'ഗ്ദ്ധ'   => 'gddh',
@@ -115,6 +120,12 @@ function generate_manglish_key($malayalam_text) {
             'ൗ' => 'ou',
         ];
 
+        // Replace common plural suffixes like "കൾ" or "കള്‍" (kal vs gal)
+        if (!$kal_is_kal) {
+            $src = str_replace('കൾ', 'ഗൾ', $src);
+            $src = str_replace('കള്‍', 'ഗള്‍', $src);
+        }
+
         // 1. Replace Conjunct + Matra / Virama
         foreach ($conjunct_bases as $conj => $base) {
             $src = str_replace($conj . '്', $base, $src);
@@ -127,7 +138,7 @@ function generate_manglish_key($malayalam_text) {
         // Conversational phonetic variants
         $src = str_replace('nthu', 'ndu', $src);
 
-        // 2. Chillu characters
+        // 2. Chillu characters (both legacy and atomic Unicode)
         $chillus = [
             "\xE0\xB4\xA3\xE0\xB5\x8D\xE2\x80\x8D" => 'n',  // ൺ
             "\xE0\xB4\xA8\xE0\xB5\x8D\xE2\x80\x8D" => 'n',  // ൻ
@@ -172,7 +183,10 @@ function generate_manglish_key($malayalam_text) {
             'ശ' => $sha_is_sh ? 'sh' : 's',
             'ഷ' => 'sh',
             'സ' => 's',
-            'ഹ' => 'h', 'ള' => 'l', 'ഴ' => 'zh', 'റ' => 'r',
+            'ഹ' => 'h',
+            'ള' => 'l',
+            'ഴ' => $zha_is_zh ? 'zh' : 'l',
+            'റ' => 'r',
         ];
 
         // Consonant + Virama
@@ -204,22 +218,24 @@ function generate_manglish_key($malayalam_text) {
         return trim(preg_replace('/\s+/', ' ', $src));
     };
 
-    $key_sh = $transliterate($text, true);
-    $key_s  = $transliterate($text, false);
+    $keys = [];
+    $keys[] = $transliterate($text, true, true, true);   // Standard (sh, kal, zh)
+    $keys[] = $transliterate($text, false, true, true);  // s variant
+    $keys[] = $transliterate($text, true, false, true);  // gal variant
+    $keys[] = $transliterate($text, true, true, false);  // l variant for zh
 
-    // If both variants are identical, return single key; otherwise return both space-delimited
-    if ($key_sh === $key_s) {
-        return $key_sh;
-    }
-    return $key_sh . ' ' . $key_s;
+    $unique_keys = array_values(array_unique(array_filter($keys)));
+    return implode(' ', $unique_keys);
 }
 }
 
 /**
  * Generates search query variations for flexible Manglish and Malayalam searching.
- * e.g., "mish" -> ["mish", "mis"]
- *       "mis"  -> ["mis", "mish"]
- *       "മിശ്ര" -> ["മിശ്ര", "mishra", "misra"]
+ * e.g., "kuruvikal" -> ["kuruvikal", "kuruvigal", "kuruvi"]
+ *       "kuruvigal" -> ["kuruvigal", "kuruvikal", "kuruvi"]
+ *       "mish"      -> ["mish", "mis"]
+ *       "mis"       -> ["mis", "mish"]
+ *       "thakazhi"  -> ["thakazhi", "thakali", "takazhi"]
  */
 if (!function_exists('get_manglish_search_variations')) {
 function get_manglish_search_variations($search_text) {
@@ -242,11 +258,55 @@ function get_manglish_search_variations($search_text) {
         $clean = trim(preg_replace('/\s+/', ' ', $clean));
         if ($clean !== '') $variations[] = $clean;
 
-        // Phonetic interchange for "sh" <-> "s"
+        $queue = [$clean];
+
+        // 1. Phonetic interchange for "sh" <-> "s"
         if (strpos($clean, 'sh') !== false) {
-            $variations[] = str_replace('sh', 's', $clean);
+            $queue[] = str_replace('sh', 's', $clean);
         } elseif (strpos($clean, 's') !== false) {
-            $variations[] = str_replace('s', 'sh', $clean);
+            $queue[] = str_replace('s', 'sh', $clean);
+        }
+
+        // 2. Plural suffix "-kal" <-> "-gal" / root word extraction
+        // e.g. "kuruvikal" <-> "kuruvigal" and root "kuruvi"
+        foreach ($queue as $item) {
+            if (preg_match('/kal$/', $item)) {
+                $queue[] = preg_replace('/kal$/', 'gal', $item);
+                $queue[] = preg_replace('/kal$/', '', $item); // root: kuruvi
+            } elseif (preg_match('/gal$/', $item)) {
+                $queue[] = preg_replace('/gal$/', 'kal', $item);
+                $queue[] = preg_replace('/gal$/', '', $item); // root: kuruvi
+            }
+        }
+
+        // 3. Phonetic interchange for "zh" <-> "l" (e.g. "thakazhi" <-> "thakali")
+        foreach ($queue as $item) {
+            if (strpos($item, 'zh') !== false) {
+                $queue[] = str_replace('zh', 'l', $item);
+            }
+        }
+
+        // 4. Phonetic interchange for "th" <-> "t" (e.g. "thakazhi" <-> "takazhi")
+        foreach ($queue as $item) {
+            if (strpos($item, 'th') !== false) {
+                $queue[] = str_replace('th', 't', $item);
+            }
+        }
+
+        // 5. Interchange for "v" <-> "w" (e.g. "kuruwikal" <-> "kuruvikal")
+        foreach ($queue as $item) {
+            if (strpos($item, 'w') !== false) {
+                $queue[] = str_replace('w', 'v', $item);
+            } elseif (strpos($item, 'v') !== false) {
+                $queue[] = str_replace('v', 'w', $item);
+            }
+        }
+
+        foreach ($queue as $q_item) {
+            $q_clean = trim($q_item);
+            if ($q_clean !== '') {
+                $variations[] = $q_clean;
+            }
         }
     }
 
