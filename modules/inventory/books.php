@@ -2,7 +2,6 @@
 // modules/inventory/books.php - Library Catalog & Inventory Management with Top Tabs
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
-require_once __DIR__ . '/../../manglish_helper.php';
 require_once __DIR__ . '/../../manglish_multi_table_search.php';
 require_login();
 
@@ -15,6 +14,9 @@ $tab = sanitize_input($_GET['tab'] ?? 'all');
 if (!in_array($tab, ['all', 'class_wise', 'issue_register', 'category_wise', 'missing', 'damage', 'lost'])) {
     $tab = 'all';
 }
+
+$has_title_key = db_table_has_column($conn, 'MstrBookStock', 'title_search_key');
+$has_author_key = db_table_has_column($conn, 'MstrBookStock', 'author_search_key');
 
 // Handle CRUD operations & Status Changes
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -57,8 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($check && db_num_rows($check) > 0) {
                     $error = "Accession Number '$accession' already exists!";
                 } else {
-                    $sql = "INSERT INTO MstrBookStock (BookName, title_search_key, author_search_key, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                    $res = db_query($conn, $sql, "sssisssssiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
+                    if ($has_title_key && $has_author_key) {
+                        $sql = "INSERT INTO MstrBookStock (BookName, title_search_key, author_search_key, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        $res = db_query($conn, $sql, "sssisssssiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
+                    } else {
+                        $sql = "INSERT INTO MstrBookStock (BookName, BookStatus, BookCode, BookRemarks, CallNumber, ISBNumber, AccessionNumber, AuthorNumber, ClassNumber, PublisherNumber, BookPrice, LanguageNumber, CategoryNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        $res = db_query($conn, $sql, "sisssssiiidii", [$book_name, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id]);
+                    }
                     if ($res) {
                         $msg = "Book added successfully to catalog stock.";
                     } else {
@@ -67,8 +74,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } elseif ($action === 'edit') {
                 $book_id = intval($_POST['BookNumber']);
-                $sql = "UPDATE MstrBookStock SET BookName = ?, title_search_key = ?, author_search_key = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
-                $res = db_query($conn, $sql, "sssisssssiiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
+                if ($has_title_key && $has_author_key) {
+                    $sql = "UPDATE MstrBookStock SET BookName = ?, title_search_key = ?, author_search_key = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
+                    $res = db_query($conn, $sql, "sssisssssiiiidii", [$book_name, $title_key, $author_key, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
+                } else {
+                    $sql = "UPDATE MstrBookStock SET BookName = ?, BookStatus = ?, BookCode = ?, BookRemarks = ?, CallNumber = ?, ISBNumber = ?, AccessionNumber = ?, AuthorNumber = ?, ClassNumber = ?, PublisherNumber = ?, BookPrice = ?, LanguageNumber = ?, CategoryNumber = ? WHERE BookNumber = ?";
+                    $res = db_query($conn, $sql, "sisssssiiiidii", [$book_name, $status, $book_code, $remarks, $call_num, $isbn, $accession, $author_id, $class_id, $pub_id, $price, $lang_id, $cat_id, $book_id]);
+                }
                 if ($res !== false) {
                     $msg = "Book details updated successfully.";
                 } else {
@@ -239,14 +251,25 @@ require_once __DIR__ . '/../../includes/header.php';
         $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp; $params[] = $sp;
         $types .= "sssssssss";
 
-        // Also check phonetic search keys for all variations (e.g. mish, mis, etc.)
+        // Check both phonetic search keys (if columns exist) and direct book/author names for all variations (including Malayalam Unicode transliterations)
         foreach ($search_variations as $var) {
-            $search_clauses[] = "b.title_search_key LIKE ?";
-            $search_clauses[] = "b.author_search_key LIKE ?";
+            $search_clauses[] = "b.BookName LIKE ?";
+            $search_clauses[] = "a.AuthorName LIKE ?";
             $var_p = "%" . $var . "%";
             $params[] = $var_p;
             $params[] = $var_p;
             $types .= "ss";
+
+            if ($has_title_key) {
+                $search_clauses[] = "b.title_search_key LIKE ?";
+                $params[] = $var_p;
+                $types .= "s";
+            }
+            if ($has_author_key) {
+                $search_clauses[] = "b.author_search_key LIKE ?";
+                $params[] = $var_p;
+                $types .= "s";
+            }
         }
 
         $where[] = "(" . implode(" OR ", $search_clauses) . ")";
@@ -276,14 +299,10 @@ require_once __DIR__ . '/../../includes/header.php';
 
     $offset = ($current_page - 1) * $per_page;
 
-    $sql_books = "SELECT b.*, a.AuthorName, COALESsCE_PUB.PublisherName, c.CategoryName, lang.LanguageName, cl.ClassName, cl.ClassCode
+    $sql_books = "SELECT b.*, a.AuthorName, p.PublisherName, c.CategoryName, lang.LanguageName, cl.ClassName, cl.ClassCode
                   FROM MstrBookStock b
                   LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
-                  LEFT JOIN (
-                      SELECT PublisherNumber, COALESCE(pub.publisher_name, p.PublisherName) as PublisherName
-                      FROM MstrPublisher p
-                      LEFT JOIN Publishers pub ON p.PublisherNumber = pub.publisher_id
-                  ) COALESsCE_PUB ON b.PublisherNumber = COALESsCE_PUB.PublisherNumber
+                  LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
                   LEFT JOIN MstrCategory c ON b.CategoryNumber = c.CategoryNumber
                   LEFT JOIN MstrLanguage lang ON b.LanguageNumber = lang.LanguageNumber
                   LEFT JOIN MstrClassification cl ON b.ClassNumber = cl.ClassNumber
@@ -305,12 +324,26 @@ require_once __DIR__ . '/../../includes/header.php';
         $e_params = ["%$search%", "%$search%", "%$search%", "%$search%", "%$search%"];
         $e_types = "sssss";
 
+        $has_e_title_key = db_table_has_column($conn, 'ExcelBookMaster', 'title_search_key');
+        $has_e_author_key = db_table_has_column($conn, 'ExcelBookMaster', 'author_search_key');
+
         foreach ($search_variations as $var) {
-            $excel_where[] = "e.title_search_key LIKE ?";
-            $excel_where[] = "e.author_search_key LIKE ?";
+            $excel_where[] = "e.BookName LIKE ?";
+            $excel_where[] = "e.AutherName LIKE ?";
             $e_params[] = "%" . $var . "%";
             $e_params[] = "%" . $var . "%";
             $e_types .= "ss";
+
+            if ($has_e_title_key) {
+                $excel_where[] = "e.title_search_key LIKE ?";
+                $e_params[] = "%" . $var . "%";
+                $e_types .= "s";
+            }
+            if ($has_e_author_key) {
+                $excel_where[] = "e.author_search_key LIKE ?";
+                $e_params[] = "%" . $var . "%";
+                $e_types .= "s";
+            }
         }
 
         $e_where_sql = implode(" OR ", $excel_where);

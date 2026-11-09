@@ -2,11 +2,12 @@
 // modules/circulation/reservation.php - Book Waitlist & Queue Management Engine
 require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../manglish_multi_table_search.php';
 require_login();
 
 // AJAX Book Finder Endpoint
 if (isset($_GET['action']) && $_GET['action'] === 'search_books') {
-    header('Content-Type: application/json');
+    header('Content-Type: application/json; charset=utf-8');
 
     $q = sanitize_input($_GET['q'] ?? '');
     $book_num = sanitize_input($_GET['BookNumber'] ?? '');
@@ -18,17 +19,62 @@ if (isset($_GET['action']) && $_GET['action'] === 'search_books') {
     $call_num = sanitize_input($_GET['CallNumber'] ?? '');
     $book_price = sanitize_input($_GET['BookPrice'] ?? '');
 
+    // If general keyword query provided without specific field filters, use unified search_books_and_authors
+    if (!empty($q) && empty($book_num) && empty($book_name) && empty($author_name) && empty($book_code) && empty($call_num)) {
+        $search_output = search_books_and_authors($conn, $q, 50);
+        $results = [];
+        foreach ($search_output['results'] as $item) {
+            $results[] = [
+                'BookNumber'      => $item['BookNumber'],
+                'BookName'        => $item['BookName'],
+                'BookRemarks'     => '',
+                'BookCode'        => $item['BookCode'],
+                'CallNumber'      => $item['CallNumber'],
+                'AccessionNumber' => $item['AccessionNumber'],
+                'ISBNumber'       => $item['ISBNumber'],
+                'BookPrice'       => $item['BookPrice'],
+                'BookStatus'      => $item['BookStatus'],
+                'AutherName'      => $item['AuthorName'],
+                'PublisherName'   => $item['PublisherName'],
+                'CategoryName'    => $item['CategoryName'],
+                'BookClass'       => $item['CategoryName']
+            ];
+        }
+        echo json_encode(['status' => 'success', 'data' => $results]);
+        exit;
+    }
+
     $where = ["1=1"];
     $params = [];
     $types = "";
 
     if (!empty($q)) {
-        $where[] = "(b.BookNumber LIKE ? OR b.BookName LIKE ? OR b.BookRemarks LIKE ? OR a.AuthorName LIKE ? OR c.ClassName LIKE ? OR b.BookCode LIKE ? OR b.CallNumber LIKE ? OR b.AccessionNumber LIKE ?)";
+        $q_clauses = [
+            "b.BookNumber LIKE ?",
+            "b.BookName LIKE ?",
+            "b.BookRemarks LIKE ?",
+            "a.AuthorName LIKE ?",
+            "c.ClassName LIKE ?",
+            "b.BookCode LIKE ?",
+            "b.CallNumber LIKE ?",
+            "b.AccessionNumber LIKE ?"
+        ];
         $searchTerm = "%$q%";
         for ($i = 0; $i < 8; $i++) {
             $params[] = $searchTerm;
             $types .= "s";
         }
+
+        $search_variations = get_manglish_search_variations($q);
+        foreach ($search_variations as $var) {
+            $q_clauses[] = "b.BookName LIKE ?";
+            $q_clauses[] = "a.AuthorName LIKE ?";
+            $var_p = "%" . $var . "%";
+            $params[] = $var_p;
+            $params[] = $var_p;
+            $types .= "ss";
+        }
+        $where[] = "(" . implode(" OR ", $q_clauses) . ")";
     }
 
     if (!empty($book_num)) {

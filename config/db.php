@@ -20,6 +20,23 @@ if ($mysqli_conn) {
 }
 
 /**
+ * Check if a specific column exists in a MySQL table (cached per request)
+ */
+function db_table_has_column($conn, $table, $column) {
+    static $cache = [];
+    $key = "$table.$column";
+    if (isset($cache[$key])) return $cache[$key];
+    if (!$conn) return false;
+
+    $safe_table = mysqli_real_escape_string($conn, (string)$table);
+    $safe_col = mysqli_real_escape_string($conn, (string)$column);
+    $res = @mysqli_query($conn, "SHOW COLUMNS FROM `$safe_table` LIKE '$safe_col'");
+    $has = ($res && mysqli_num_rows($res) > 0);
+    $cache[$key] = $has;
+    return $has;
+}
+
+/**
  * Transaction Control Helpers (MySQLi)
  */
 function db_begin_transaction($conn) {

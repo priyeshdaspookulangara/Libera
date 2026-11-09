@@ -1,26 +1,210 @@
 <?php
 /**
  * manglish_helper.php
- * Standalone Malayalam to Manglish (Latin phonetic transliteration) Engine.
+ * Standalone Bidirectional Malayalam <-> Manglish Phonetic Transliteration Engine.
  *
- * Converts Malayalam Unicode strings into normalized lowercase English phonetic representations
- * to enable search in English/Manglish for Malayalam titles and authors.
+ * Capabilities:
+ *   1. Malayalam -> Manglish (`generate_manglish_key`):
+ *      Converts Malayalam Unicode strings into normalized lowercase Latin phonetic keys
+ *      stored in `title_search_key` and `author_search_key`.
+ *      Examples:
+ *        "കുരുവികൾ"    -> "kuruvikal kuruvigal"
+ *        "മിശ്രവിവാഹം"  -> "mishravivaham misravivaham"
+ *        "തകഴി"        -> "thakazhi thakali takazhi"
  *
- * Supports dual-phonetic variants for Malayalam phonemes like:
- *   - "ശ" / "ശ്ര" / "ഷ" (matching both "sh" and "s", so "മിശ്രവിവാഹം" matches both "mish" and "mis")
- *   - Plural suffixes "-കൾ" (-kal / -gal)
- *   - "ഴ" ("zh" and "l")
- *   - "ത" / "ഥ" ("th" and "t")
- *   - "വ" ("v" and "w")
+ *   2. Manglish -> Malayalam Unicode (`manglish_to_malayalam_terms`):
+ *      Converts Latin Manglish search queries into candidate Malayalam Unicode strings.
+ *      This allows searching "kuruvikal" to DIRECTLY MATCH `b.BookName LIKE '%കുരുവികൾ%'`
+ *      in MySQL EVEN IF `title_search_key` has NOT been populated in the database!
  *
- * Examples:
- *   "മിശ്രവിവാഹം"  -> "mishravivaham misravivaham"
- *   "കുരുവികൾ"    -> "kuruvikal kuruvigal"
- *   "തകഴി"        -> "thakazhi thakali takazhi"
- *   "ഇന്ദുലേഖ"    -> "indulekha"
- *   "ചന്തുമേനോൻ"  -> "chandumenon"
- *   "ബഷീർ"       -> "basheer basir"
+ *   3. Universal Query Variations (`get_manglish_search_variations`):
+ *      Returns both phonetic Latin variations and candidate Malayalam Unicode strings
+ *      for any search query.
  */
+
+if (!function_exists('manglish_to_malayalam_terms')) {
+function manglish_to_malayalam_terms($input) {
+    $text = strtolower(trim((string)$input));
+    if ($text === '') return [];
+
+    // If input already contains Malayalam characters, return as is
+    if (preg_match('/[\x{0D00}-\x{0D7F}]/u', $text)) {
+        return [$text];
+    }
+
+    $clean = preg_replace('/[^a-z0-9]/', '', $text);
+    if ($clean === '') return [];
+
+    $results = [];
+
+    // 1. High frequency and literature master dictionary
+    $dict = [
+        'kuruvi' => ['കുരുവി'],
+        'kuruvikal' => ['കുരുവികൾ', 'കുരുവികള്‍'],
+        'kuruvigal' => ['കുരുവികൾ', 'കുരുവികള്‍'],
+        'thakazhi' => ['തകഴി'],
+        'thakali' => ['തകഴി'],
+        'takazhi' => ['തകഴി'],
+        'sivasankara' => ['ശിവശങ്കര'],
+        'shivashankara' => ['ശിവശങ്കര'],
+        'pillai' => ['പിള്ള'],
+        'pilla' => ['പിള്ള'],
+        'chemmeen' => ['ചെമ്മീൻ'],
+        'chemmin' => ['ചെമ്മീൻ'],
+        'mish' => ['മിശ്ര', 'മിശ'],
+        'mishra' => ['മിശ്ര'],
+        'misra' => ['മിശ്ര'],
+        'vivaham' => ['വിവാഹം'],
+        'mishravivaham' => ['മിശ്രവിവാഹം'],
+        'misravivaham' => ['മിശ്രവിവാഹം'],
+        'balyakalasakhi' => ['ബാല്യകാലസഖി'],
+        'balyakala' => ['ബാല്യകാല'],
+        'sakhi' => ['സഖി'],
+        'indulekha' => ['ഇന്ദുലേഖ'],
+        'chandu' => ['ചന്തു'],
+        'menon' => ['മേനോൻ'],
+        'basheer' => ['ബഷീർ'],
+        'basir' => ['ബഷീർ'],
+        'vaikom' => ['വൈക്കം'],
+        'muhammad' => ['മുഹമ്മദ്'],
+        'kerala' => ['കേരള'],
+        'sahithyam' => ['സാഹിത്യം'],
+        'kavitha' => ['കവിത'],
+        'kadha' => ['കഥ'],
+        'katha' => ['കഥ'],
+        'noval' => ['നോവൽ'],
+        'novel' => ['നോവൽ'],
+        'charithram' => ['ചരിത്രം'],
+        'padavali' => ['പാഠാവലി'],
+        'njan' => ['ഞാൻ'],
+        'ente' => ['എന്റെ'],
+        'ammayum' => ['അമ്മയും'],
+        'amma' => ['അമ്മ'],
+        'achan' => ['അച്ഛൻ'],
+    ];
+
+    if (isset($dict[$clean])) {
+        foreach ($dict[$clean] as $term) {
+            $results[] = $term;
+        }
+    }
+
+    // 2. Dynamic Algorithmic Syllabic Transliterator (Latin -> Malayalam Unicode)
+    $consonants = [
+        'shsh' => 'ശ്ശ', 'ss' => 'സ്സ', 'tth' => 'ത്ത', 'nth' => 'ന്ത', 'ndh' => 'ന്ധ',
+        'nd' => 'ന്ദ', 'nt' => 'ന്റ', 'nch' => 'ഞ്ച', 'nj' => 'ഞ്ജ', 'ng' => 'ങ്ങ',
+        'nk' => 'ങ്ക', 'mm' => 'മ്മ', 'nn' => 'ന്ന', 'kk' => 'ക്ക', 'gg' => 'ഗ്ഗ',
+        'ch' => 'ച', 'jh' => 'ഝ', 'tt' => 'ട്ട', 'pp' => 'പ്പ', 'bb' => 'ബ്ബ',
+        'll' => 'ള്ള', 'vv' => 'വ്വ', 'yy' => 'യ്യ', 'ksh' => 'ക്ഷ', 'thr' => 'ത്ര',
+        'shr' => 'ശ്ര', 'sr' => 'സ്ര', 'pr' => 'പ്ര', 'br' => 'ബ്ര', 'kr' => 'ക്ര',
+        'gr' => 'ഗ്ര', 'dr' => 'ദ്ര', 'dhr' => 'ധ്ര', 'kh' => 'ഖ', 'gh' => 'ഘ',
+        'th' => 'ത', 'dh' => 'ധ', 'ph' => 'ഫ', 'bh' => 'ഭ', 'sh' => 'ശ',
+        'zh' => 'ഴ', 'k' => 'ക', 'g' => 'ഗ', 'j' => 'ജ', 't' => 'ത',
+        'd' => 'ദ', 'n' => 'ന', 'p' => 'പ', 'b' => 'ബ', 'm' => 'മ',
+        'y' => 'യ', 'r' => 'ര', 'l' => 'ല', 'v' => 'വ', 'w' => 'വ',
+        's' => 'സ', 'h' => 'ഹ',
+    ];
+
+    $matras = [
+        'aa' => 'ാ', 'a' => '',
+        'ee' => 'ീ', 'i' => 'ി',
+        'oo' => 'ൂ', 'u' => 'ു',
+        'ai' => 'ൈ',
+        'au' => 'ൗ', 'ou' => 'ൗ',
+        'e' => 'െ',
+        'o' => 'ൊ',
+    ];
+
+    $init_vowels = [
+        'aa' => 'ആ', 'a' => 'അ',
+        'ee' => 'ഈ', 'i' => 'ഇ',
+        'oo' => 'ഊ', 'u' => 'ഉ',
+        'ai' => 'ഐ',
+        'au' => 'ഔ', 'ou' => 'ഔ',
+        'e' => 'എ',
+        'o' => 'ഒ',
+    ];
+
+    $chillus = [
+        'l' => 'ൾ',
+        'r' => 'ർ',
+        'n' => 'ൻ',
+        'm' => 'ം',
+    ];
+
+    $len = strlen($clean);
+    $pos = 0;
+    $out = '';
+
+    while ($pos < $len) {
+        // Handle plural endings: "-kal" or "-gal" -> "കൾ"
+        if (substr($clean, $pos) === 'kal' || substr($clean, $pos) === 'gal') {
+            $out .= 'കൾ';
+            $pos += 3;
+            continue;
+        }
+
+        $matched = false;
+
+        // Try consonants
+        foreach ($consonants as $latin => $c_uni) {
+            $l_len = strlen($latin);
+            if (substr($clean, $pos, $l_len) === $latin) {
+                // If it is at the very end of word and can be a chillu:
+                if ($pos + $l_len === $len && isset($chillus[$latin])) {
+                    $out .= $chillus[$latin];
+                    $pos += $l_len;
+                    $matched = true;
+                    break;
+                }
+
+                // Check next token for vowel / matra
+                $v_matched = false;
+                foreach ($matras as $vlatin => $m_uni) {
+                    $v_len = strlen($vlatin);
+                    if (substr($clean, $pos + $l_len, $v_len) === $vlatin) {
+                        $out .= $c_uni . $m_uni;
+                        $pos += $l_len + $v_len;
+                        $v_matched = true;
+                        $matched = true;
+                        break;
+                    }
+                }
+                if ($v_matched) break;
+
+                // Consonant followed by another consonant -> virama (chandrakkala)
+                $out .= $c_uni . '്';
+                $pos += $l_len;
+                $matched = true;
+                break;
+            }
+        }
+        if ($matched) continue;
+
+        // Try initial vowels
+        foreach ($init_vowels as $vlatin => $v_uni) {
+            $v_len = strlen($vlatin);
+            if (substr($clean, $pos, $v_len) === $vlatin) {
+                $out .= $v_uni;
+                $pos += $v_len;
+                $matched = true;
+                break;
+            }
+        }
+        if ($matched) continue;
+
+        // Default: copy
+        $out .= $clean[$pos];
+        $pos++;
+    }
+
+    if ($out !== '') {
+        $results[] = $out;
+    }
+
+    return array_values(array_unique(array_filter($results)));
+}
+}
 
 if (!function_exists('generate_manglish_key')) {
 function generate_manglish_key($malayalam_text) {
@@ -231,11 +415,7 @@ function generate_manglish_key($malayalam_text) {
 
 /**
  * Generates search query variations for flexible Manglish and Malayalam searching.
- * e.g., "kuruvikal" -> ["kuruvikal", "kuruvigal", "kuruvi"]
- *       "kuruvigal" -> ["kuruvigal", "kuruvikal", "kuruvi"]
- *       "mish"      -> ["mish", "mis"]
- *       "mis"       -> ["mis", "mish"]
- *       "thakazhi"  -> ["thakazhi", "thakali", "takazhi"]
+ * Returns both Latin Manglish variations and Candidate Malayalam Unicode strings!
  */
 if (!function_exists('get_manglish_search_variations')) {
 function get_manglish_search_variations($search_text) {
@@ -252,7 +432,8 @@ function get_manglish_search_variations($search_text) {
             if ($part !== '') $variations[] = $part;
         }
     } else {
-        // Latin / English search query
+        // Latin / English search query:
+        // 1. Generate Latin phonetic variations
         $clean = strtolower($search);
         $clean = preg_replace('/[^a-z0-9\s]/', '', $clean);
         $clean = trim(preg_replace('/\s+/', ' ', $clean));
@@ -260,15 +441,14 @@ function get_manglish_search_variations($search_text) {
 
         $queue = [$clean];
 
-        // 1. Phonetic interchange for "sh" <-> "s"
+        // Phonetic interchange for "sh" <-> "s"
         if (strpos($clean, 'sh') !== false) {
             $queue[] = str_replace('sh', 's', $clean);
         } elseif (strpos($clean, 's') !== false) {
             $queue[] = str_replace('s', 'sh', $clean);
         }
 
-        // 2. Plural suffix "-kal" <-> "-gal" / root word extraction
-        // e.g. "kuruvikal" <-> "kuruvigal" and root "kuruvi"
+        // Plural suffix "-kal" <-> "-gal" / root extraction
         foreach ($queue as $item) {
             if (preg_match('/kal$/', $item)) {
                 $queue[] = preg_replace('/kal$/', 'gal', $item);
@@ -279,21 +459,21 @@ function get_manglish_search_variations($search_text) {
             }
         }
 
-        // 3. Phonetic interchange for "zh" <-> "l" (e.g. "thakazhi" <-> "thakali")
+        // Phonetic interchange for "zh" <-> "l"
         foreach ($queue as $item) {
             if (strpos($item, 'zh') !== false) {
                 $queue[] = str_replace('zh', 'l', $item);
             }
         }
 
-        // 4. Phonetic interchange for "th" <-> "t" (e.g. "thakazhi" <-> "takazhi")
+        // Phonetic interchange for "th" <-> "t"
         foreach ($queue as $item) {
             if (strpos($item, 'th') !== false) {
                 $queue[] = str_replace('th', 't', $item);
             }
         }
 
-        // 5. Interchange for "v" <-> "w" (e.g. "kuruwikal" <-> "kuruvikal")
+        // Interchange for "v" <-> "w"
         foreach ($queue as $item) {
             if (strpos($item, 'w') !== false) {
                 $queue[] = str_replace('w', 'v', $item);
@@ -306,6 +486,15 @@ function get_manglish_search_variations($search_text) {
             $q_clean = trim($q_item);
             if ($q_clean !== '') {
                 $variations[] = $q_clean;
+            }
+        }
+
+        // 2. Generate Candidate Malayalam Unicode strings (Reverse transliteration)
+        // so that query directly matches BookName even if search keys are null in DB!
+        $mal_candidates = manglish_to_malayalam_terms($clean);
+        foreach ($mal_candidates as $m_term) {
+            if (!empty($m_term)) {
+                $variations[] = $m_term;
             }
         }
     }

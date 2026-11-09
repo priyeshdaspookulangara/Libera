@@ -8,20 +8,14 @@
  *   - MstrAuthor directly
  *   - ExcelBookMaster (legacy catalog master)
  *
- * Translates phonetic queries between Malayalam Unicode and Manglish (Latin),
+ * Translates phonetic queries bidirectionally between Malayalam Unicode and Manglish (Latin),
  * resolving dialect / spelling nuances (e.g., -kal / -gal, sh / s, zh / l, v / w, th / t, etc.).
+ * Automatically adapts if title_search_key / author_search_key columns are present or absent!
  *
  * Usage:
  *   require_once __DIR__ . '/config/db.php';
  *   require_once __DIR__ . '/manglish_multi_table_search.php';
  *   $search_output = search_books_and_authors($conn, $query);
- *   // Returns:
- *   // [
- *   //    'query' => 'thakazhi',
- *   //    'translated' => 'തകഴി / thakazhi',
- *   //    'variations' => [...],
- *   //    'results' => [ ['BookNumber' => ..., 'BookName' => ..., 'AuthorName' => ..., 'CallNumber' => ..., ...], ... ]
- *   // ]
  */
 
 require_once __DIR__ . '/includes/manglish_helper.php';
@@ -44,22 +38,19 @@ function search_books_and_authors($conn, $query, $limit = 50) {
     if ($is_malayalam) {
         $translated = generate_manglish_key($raw_query);
     } else {
-        $translated = generate_manglish_key($raw_query);
+        $mal_cands = manglish_to_malayalam_terms($raw_query);
+        $translated = !empty($mal_cands) ? $mal_cands[0] : generate_manglish_key($raw_query);
     }
 
-    // Generate phonetic search variations
+    // Generate phonetic search variations (Latin variants + Malayalam Unicode candidates)
     $variations = get_manglish_search_variations($raw_query);
-    if (!in_array($translated, $variations) && !empty($translated)) {
-        foreach (explode(' ', $translated) as $part) {
-            $part = trim($part);
-            if ($part !== '' && !in_array($part, $variations)) {
-                $variations[] = $part;
-            }
-        }
-    }
 
     $results = [];
     $seen_books = [];
+
+    // Check if optional search key columns exist in MstrBookStock
+    $has_mstr_title_key = db_table_has_column($conn, 'MstrBookStock', 'title_search_key');
+    $has_mstr_author_key = db_table_has_column($conn, 'MstrBookStock', 'author_search_key');
 
     // 1. Search in MstrBookStock joined with MstrAuthor, MstrPublisher, MstrCategory
     $where_clauses = [
@@ -74,17 +65,27 @@ function search_books_and_authors($conn, $query, $limit = 50) {
     $params = [$raw_like, $raw_like, $raw_like, $raw_like, $raw_like, $raw_like];
     $types = "ssssss";
 
-    // Also check title_search_key and author_search_key for all variations
+    // For each variation, match BookName, AuthorName, and search keys if present
     foreach ($variations as $var) {
-        $where_clauses[] = "b.title_search_key LIKE ?";
-        $where_clauses[] = "b.author_search_key LIKE ?";
+        $where_clauses[] = "b.BookName LIKE ?";
+        $where_clauses[] = "a.AuthorName LIKE ?";
         $var_like = '%' . $var . '%';
         $params[] = $var_like;
         $params[] = $var_like;
         $types .= "ss";
+
+        if ($has_mstr_title_key) {
+            $where_clauses[] = "b.title_search_key LIKE ?";
+            $params[] = $var_like;
+            $types .= "s";
+        }
+        if ($has_mstr_author_key) {
+            $where_clauses[] = "b.author_search_key LIKE ?";
+            $params[] = $var_like;
+            $types .= "s";
+        }
     }
 
-    // Combine search clauses
     $where_sql = implode(" OR ", $where_clauses);
 
     $sql = "SELECT b.BookNumber,
@@ -97,9 +98,7 @@ function search_books_and_authors($conn, $query, $limit = 50) {
                    COALESCE(p.PublisherName, '') AS PublisherName,
                    COALESCE(c.CategoryName, '') AS CategoryName,
                    b.BookPrice,
-                   b.BookStatus,
-                   b.title_search_key,
-                   b.author_search_key
+                   b.BookStatus
             FROM MstrBookStock b
             LEFT JOIN MstrAuthor a ON b.AuthorNumber = a.AuthorNumber
             LEFT JOIN MstrPublisher p ON b.PublisherNumber = p.PublisherNumber
@@ -131,20 +130,23 @@ function search_books_and_authors($conn, $query, $limit = 50) {
         }
     }
 
-    // 2. Also search MstrAuthor directly for author name matches (if author books might not have been caught)
+    // 2. Also search MstrAuthor directly for author name matches
     $auth_where = ["a.AuthorName LIKE ?"];
     $auth_params = [$raw_like];
     $auth_types = "s";
+    $has_auth_key = db_table_has_column($conn, 'MstrAuthor', 'author_search_key');
     foreach ($variations as $var) {
-        $auth_where[] = "a.author_search_key LIKE ?";
+        $auth_where[] = "a.AuthorName LIKE ?";
         $auth_params[] = '%' . $var . '%';
         $auth_types .= "s";
+        if ($has_auth_key) {
+            $auth_where[] = "a.author_search_key LIKE ?";
+            $auth_params[] = '%' . $var . '%';
+            $auth_types .= "s";
+        }
     }
-    // Check if author_search_key column exists
-    $auth_sql = "SELECT a.AuthorNumber, a.AuthorName
-                 FROM MstrAuthor a
-                 WHERE " . implode(" OR ", $auth_where) . "
-                 LIMIT 20";
+
+    $auth_sql = "SELECT a.AuthorNumber FROM MstrAuthor a WHERE " . implode(" OR ", $auth_where) . " LIMIT 20";
     $auth_res = @db_query($conn, $auth_sql, $auth_types, $auth_params);
     if ($auth_res) {
         $author_ids = [];
@@ -196,6 +198,9 @@ function search_books_and_authors($conn, $query, $limit = 50) {
     // 3. Search ExcelBookMaster (legacy catalog master table)
     $remaining_limit = $limit - count($results);
     if ($remaining_limit > 0) {
+        $has_e_title_key = db_table_has_column($conn, 'ExcelBookMaster', 'title_search_key');
+        $has_e_author_key = db_table_has_column($conn, 'ExcelBookMaster', 'author_search_key');
+
         $excel_where = [
             "e.BookName LIKE ?",
             "e.AutherName LIKE ?",
@@ -207,11 +212,22 @@ function search_books_and_authors($conn, $query, $limit = 50) {
         $e_types = "sssss";
 
         foreach ($variations as $var) {
-            $excel_where[] = "e.title_search_key LIKE ?";
-            $excel_where[] = "e.author_search_key LIKE ?";
+            $excel_where[] = "e.BookName LIKE ?";
+            $excel_where[] = "e.AutherName LIKE ?";
             $e_params[] = '%' . $var . '%';
             $e_params[] = '%' . $var . '%';
             $e_types .= "ss";
+
+            if ($has_e_title_key) {
+                $excel_where[] = "e.title_search_key LIKE ?";
+                $e_params[] = '%' . $var . '%';
+                $e_types .= "s";
+            }
+            if ($has_e_author_key) {
+                $excel_where[] = "e.author_search_key LIKE ?";
+                $e_params[] = '%' . $var . '%';
+                $e_types .= "s";
+            }
         }
 
         $e_where_sql = implode(" OR ", $excel_where);
@@ -227,7 +243,7 @@ function search_books_and_authors($conn, $query, $limit = 50) {
                       ORDER BY e.BookNumber ASC
                       LIMIT " . intval($remaining_limit);
 
-        $e_res = db_query($conn, $excel_sql, $e_types, $e_params);
+        $e_res = @db_query($conn, $excel_sql, $e_types, $e_params);
         if ($e_res) {
             while ($erow = db_fetch_assoc($e_res)) {
                 $key = 'EXCEL_' . $erow['BookNumber'];
