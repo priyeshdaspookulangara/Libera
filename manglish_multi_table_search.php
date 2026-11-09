@@ -20,6 +20,26 @@
 
 require_once __DIR__ . '/includes/manglish_helper.php';
 
+/**
+ * Defensive schema column checker: Ensures db_table_has_column is ALWAYS available
+ * even if an older config/db.php is present on the server!
+ */
+if (!function_exists('db_table_has_column')) {
+    function db_table_has_column($conn, $table, $column) {
+        static $cache = [];
+        $key = "$table.$column";
+        if (isset($cache[$key])) return $cache[$key];
+        if (!$conn) return false;
+
+        $safe_table = mysqli_real_escape_string($conn, (string)$table);
+        $safe_col = mysqli_real_escape_string($conn, (string)$column);
+        $res = @mysqli_query($conn, "SHOW COLUMNS FROM `$safe_table` LIKE '$safe_col'");
+        $has = ($res && mysqli_num_rows($res) > 0);
+        $cache[$key] = $has;
+        return $has;
+    }
+}
+
 if (!function_exists('search_books_and_authors')) {
 function search_books_and_authors($conn, $query, $limit = 50) {
     $raw_query = trim((string)$query);

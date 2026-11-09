@@ -1,26 +1,23 @@
 <?php
 /**
- * manglish_helper.php
  * Standalone Bidirectional Malayalam <-> Manglish Phonetic Transliteration Engine.
- *
- * Capabilities:
- *   1. Malayalam -> Manglish (`generate_manglish_key`):
- *      Converts Malayalam Unicode strings into normalized lowercase Latin phonetic keys
- *      stored in `title_search_key` and `author_search_key`.
- *      Examples:
- *        "കുരുവികൾ"    -> "kuruvikal kuruvigal"
- *        "മിശ്രവിവാഹം"  -> "mishravivaham misravivaham"
- *        "തകഴി"        -> "thakazhi thakali takazhi"
- *
- *   2. Manglish -> Malayalam Unicode (`manglish_to_malayalam_terms`):
- *      Converts Latin Manglish search queries into candidate Malayalam Unicode strings.
- *      This allows searching "kuruvikal" to DIRECTLY MATCH `b.BookName LIKE '%കുരുവികൾ%'`
- *      in MySQL EVEN IF `title_search_key` has NOT been populated in the database!
- *
- *   3. Universal Query Variations (`get_manglish_search_variations`):
- *      Returns both phonetic Latin variations and candidate Malayalam Unicode strings
- *      for any search query.
  */
+
+if (!function_exists('db_table_has_column')) {
+    function db_table_has_column($conn, $table, $column) {
+        static $cache = [];
+        $key = "$table.$column";
+        if (isset($cache[$key])) return $cache[$key];
+        if (!$conn) return false;
+
+        $safe_table = mysqli_real_escape_string($conn, (string)$table);
+        $safe_col = mysqli_real_escape_string($conn, (string)$column);
+        $res = @mysqli_query($conn, "SHOW COLUMNS FROM `$safe_table` LIKE '$safe_col'");
+        $has = ($res && mysqli_num_rows($res) > 0);
+        $cache[$key] = $has;
+        return $has;
+    }
+}
 
 if (!function_exists('manglish_to_malayalam_terms')) {
 function manglish_to_malayalam_terms($input) {
