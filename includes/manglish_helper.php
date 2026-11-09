@@ -19,6 +19,25 @@ if (!function_exists('db_table_has_column')) {
     }
 }
 
+if (!function_exists('translate_manglish_to_malayalam')) {
+/**
+ * Translates phonetic Manglish terms to candidate Malayalam Unicode representations.
+ * Accepts optional $conn parameter for database dictionary lookup if available.
+ */
+function translate_manglish_to_malayalam($conn = null, $raw_term = '') {
+    $term = strtolower(trim((string)$raw_term));
+    if ($term === '') return [];
+
+    // If input already contains Malayalam Unicode characters, return as is
+    if (preg_match('/[\x{0D00}-\x{0D7F}]/u', $term)) {
+        return [$term];
+    }
+
+    $translations = manglish_to_malayalam_terms($term);
+    return array_values(array_unique(array_filter($translations)));
+}
+}
+
 if (!function_exists('manglish_to_malayalam_terms')) {
 function manglish_to_malayalam_terms($input) {
     $text = strtolower(trim((string)$input));
@@ -39,6 +58,9 @@ function manglish_to_malayalam_terms($input) {
         'kuruvi' => ['കുരുവി'],
         'kuruvikal' => ['കുരുവികൾ', 'കുരുവികള്‍'],
         'kuruvigal' => ['കുരുവികൾ', 'കുരുവികള്‍'],
+        'poo' => ['പൂ'],
+        'poompatta' => ['പൂമ്പാറ്റ'],
+        'poompattakal' => ['പൂമ്പാറ്റകൾ'],
         'thakazhi' => ['തകഴി'],
         'thakali' => ['തകഴി'],
         'takazhi' => ['തകഴി'],

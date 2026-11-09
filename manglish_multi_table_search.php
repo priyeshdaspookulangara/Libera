@@ -40,6 +40,88 @@ if (!function_exists('db_table_has_column')) {
     }
 }
 
+/**
+ * Flexible Prefix & Substring Book Search Engine
+ * Matches both wildcard prefix (term%) and exact substring (%term%) across
+ * Malayalam Unicode and Manglish transliterated terms.
+ */
+if (!function_exists('search_books_prefix_flexible')) {
+function search_books_prefix_flexible($conn, $user_query, $limit = 50) {
+    $raw_term = strtolower(trim((string)$user_query));
+    if (empty($raw_term)) {
+        return ['results' => [], 'translated' => ''];
+    }
+
+    // 1. Get phonetic Malayalam translation for the query
+    $translations = translate_manglish_to_malayalam($conn, $raw_term);
+    $all_terms = array_unique(array_merge([$raw_term], $translations));
+
+    // Dynamic schema inspection for search key columns
+    $has_title_key = db_table_has_column($conn, 'MstrBookStock', 'title_search_key');
+    $has_author_key = db_table_has_column($conn, 'MstrBookStock', 'author_search_key');
+
+    $target_columns = [
+        'b.BookName',
+        'a.AuthorName'
+    ];
+    if ($has_title_key) {
+        $target_columns[] = 'b.title_search_key';
+    }
+    if ($has_author_key) {
+        $target_columns[] = 'b.author_search_key';
+    }
+
+    $where_clauses = [];
+    $params = [];
+    $types = "";
+
+    foreach ($all_terms as $term) {
+        // Match both exact substring (%term%) AND wildcard prefix (term%)
+        $like_sub = '%' . $term . '%';
+        $like_pref = $term . '%';
+
+        foreach ($target_columns as $col) {
+            // Check if column contains the term or starts with the term
+            $where_clauses[] = "($col LIKE ? OR $col LIKE ?)";
+            $params[] = $like_sub;
+            $params[] = $like_pref;
+            $types .= "ss";
+        }
+    }
+
+    $where_sql = "(" . implode(" OR ", $where_clauses) . ")";
+
+    $sql = "SELECT
+                b.BookNumber,
+                b.BookName,
+                COALESCE(b.BookCode, '') AS BookCode,
+                COALESCE(b.CallNumber, '') AS CallNumber,
+                COALESCE(b.AccessionNumber, '') AS AccessionNumber,
+                b.BookPrice,
+                b.BookStatus,
+                a.AuthorNumber,
+                COALESCE(a.AuthorName, '') AS AuthorName
+            FROM `MstrBookStock` b
+            LEFT JOIN `MstrAuthor` a ON b.AuthorNumber = a.AuthorNumber
+            WHERE $where_sql
+            LIMIT " . intval($limit);
+
+    $result = db_query($conn, $sql, $types, $params);
+
+    $rows = [];
+    if ($result) {
+        while ($row = db_fetch_assoc($result)) {
+            $rows[] = $row;
+        }
+    }
+
+    return [
+        'results'    => $rows,
+        'translated' => implode(" / ", $translations)
+    ];
+}
+}
+
 if (!function_exists('search_books_and_authors')) {
 function search_books_and_authors($conn, $query, $limit = 50) {
     $raw_query = trim((string)$query);
